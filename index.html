@@ -553,7 +553,7 @@ table.rtable tr:hover td { background: #fafaf8; }
 }
 .modal-overlay.open { display: flex; }
 .modal {
-  background: white;
+  background: var(--card);
   border-radius: 10px;
   max-width: 480px;
   width: 100%;
@@ -2360,12 +2360,7 @@ function openAddMemberPistolModal(mid) {
 function editMember(mid) {
   const m = allMembers[mid];
   if (!m) return;
-  document.getElementById('add-member-id').value = mid;
-  document.getElementById('am-first').value = m.firstName || '';
-  document.getElementById('am-last').value = m.lastName || '';
-  if (document.getElementById('am-ro')) document.getElementById('am-ro').checked = m.isRO || false;
-  document.getElementById('add-member-title').textContent = 'Edit Member';
-  document.getElementById('add-member-modal').classList.add('open');
+  openMemberModal(mid); // delegate to single function that sets ALL fields
 }
 
 async function convertToMember(mid) {
@@ -2750,8 +2745,10 @@ async function checkShareMode() {
       </div>
       <div class="sync-badge ok">● Results</div>`;
 
-    const resultsPage = document.getElementById('page-results');
-    resultsPage.classList.add('share-visible');
+    // Inject CSS to force page-results visible, overriding !important rule
+    const showStyle = document.createElement('style');
+    showStyle.textContent = '#page-results { display: block !important; max-width: 860px; margin: 0 auto; }';
+    document.head.appendChild(showStyle);
     renderResults();
     resultsPage.querySelector('.no-print')?.remove();
 
