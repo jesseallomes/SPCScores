@@ -217,6 +217,7 @@ input[type=text], input[type=number], input[type=email], select, input[type=date
   margin-bottom: 12px;
   transition: border-color 0.15s;
   -webkit-appearance: none;
+  color-scheme: light dark;
 }
 
 input:focus, select:focus {
@@ -2330,6 +2331,14 @@ async function loadMembersList() {
       <button class="btn btn-outline btn-sm" onclick="openAddMemberPistolModal('${m.id}')">+ Add Pistol</button>
     </div>`;
   }).join('');
+
+  const memberSection = members.length
+    ? `<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--panel);padding:6px 0;border-bottom:2px solid var(--panel);margin-bottom:10px">Members (${members.length})</div>${renderGroup(members)}`
+    : '';
+  const visitorSection = visitors.length
+    ? `<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:6px 0;border-bottom:2px solid var(--muted);margin:16px 0 10px">Visitors (${visitors.length})</div>${renderGroup(visitors)}`
+    : '';
+  el.innerHTML = memberSection + visitorSection;
 }
 
 function openAddMemberPistolModal(mid) {
@@ -2718,12 +2727,13 @@ async function checkShareMode() {
       return true;
     }
 
-    S.title = data.title;
-    S.date = data.date;
-    S.steel = data.steel;
-    S.paper = data.paper;
+    S.title = data.title || '';
+    S.date = data.date || '';
+    S.steel = Object.assign({ on: false, name: 'Steel', method: 'single', stages: 1, penalty: 5 }, data.steel || {});
+    S.paper = Object.assign({ on: false, name: 'Paper', shots: 12 }, data.paper || {});
     S.shooters = data.shooters || [];
     S.scores = data.scores || {};
+    console.log('Share loaded: steel.on=', S.steel.on, 'paper.on=', S.paper.on, 'shooters=', S.shooters.length);
 
     // Restore header
     document.querySelector('header').style.display = 'flex';
@@ -2844,8 +2854,10 @@ function applyTheme(theme) {
     root.style.setProperty('--card', '#1e1e22');
     root.style.setProperty('--text', '#e8e8ea');
     root.style.setProperty('--border', '#2a2a2e');
-    root.style.setProperty('--input-bg', '#111113');
+    root.style.setProperty('--input-bg', '#1a1a1e');
     root.style.setProperty('--muted', '#8888a0');
+    root.style.setProperty('--panel', '#0d1b26');
+    root.style.setProperty('--panel2', '#122030');
   } else {
     root.style.setProperty('--bg', '#f4f4f2');
     root.style.setProperty('--white', '#ffffff');
@@ -2854,6 +2866,8 @@ function applyTheme(theme) {
     root.style.setProperty('--border', '#ddd');
     root.style.setProperty('--input-bg', '#f9f9f7');
     root.style.setProperty('--muted', '#666');
+    root.style.setProperty('--panel', '#1c2b3a');
+    root.style.setProperty('--panel2', '#243447');
   }
   updateThemeButtons();
   const btn = document.getElementById('theme-toggle-btn');
