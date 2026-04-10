@@ -39,6 +39,7 @@ html.share-loading body { visibility: hidden; }
 body.share-mode > header,
 body.share-mode > .nav-tabs,
 body.share-mode > .page { display: none !important; }
+.page.share-visible { display: block !important; max-width: 860px; margin: 0 auto; }
 
 @import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Roboto:wght@300;400;500&family=Roboto+Mono:wght@400;600&display=swap');
 
@@ -176,7 +177,7 @@ header {
 
 /* CARDS */
 .card {
-  background: var(--white);
+  background: var(--card);
   border-radius: 8px;
   box-shadow: var(--shadow);
   padding: 16px;
@@ -294,7 +295,7 @@ input:focus, select:focus {
 
 /* SCORE CARDS */
 .shooter-score-card {
-  background: white;
+  background: var(--card);
   border-radius: 8px;
   box-shadow: var(--shadow);
   margin-bottom: 0;
@@ -324,7 +325,7 @@ input:focus, select:focus {
 
 /* PISTOL ENTRY within score card */
 .pistol-entry {
-  background: var(--bg);
+  background: var(--card);
   border: 1.5px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
@@ -456,7 +457,7 @@ input:focus, select:focus {
 }
 
 .results-table-wrap {
-  background: white;
+  background: var(--card);
   border-radius: 0 0 8px 8px;
   box-shadow: var(--shadow);
   overflow-x: auto;
@@ -570,7 +571,8 @@ table.rtable tr:hover td { background: #fafaf8; }
 
 /* HISTORY */
 .history-item {
-  background: white;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: var(--shadow);
   padding: 14px 16px;
@@ -594,6 +596,7 @@ table.rtable tr:hover td { background: #fafaf8; }
   font-size: 16px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  color: var(--text);
 }
 
 /* TOAST */
@@ -2748,9 +2751,7 @@ async function checkShareMode() {
       <div class="sync-badge ok">● Results</div>`;
 
     const resultsPage = document.getElementById('page-results');
-    resultsPage.style.display = 'block';
-    resultsPage.style.maxWidth = '860px';
-    resultsPage.style.margin = '0 auto';
+    resultsPage.classList.add('share-visible');
     renderResults();
     resultsPage.querySelector('.no-print')?.remove();
 
