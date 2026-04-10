@@ -1651,6 +1651,7 @@ function openAddMemberModal(standalone) {
   document.getElementById('am-first').value = '';
   document.getElementById('am-last').value = '';
   if (document.getElementById('am-ro')) document.getElementById('am-ro').checked = false;
+  if (document.getElementById('am-optout')) document.getElementById('am-optout').checked = false;
   document.getElementById('add-member-title').textContent = 'Add New Member';
   document.getElementById('add-member-modal').classList.add('open');
 }
@@ -2648,9 +2649,9 @@ function showSharePopup(shareUrl) {
         <button class="btn btn-blue btn-sm" onclick="copyShareUrl('${shareUrl}')">Copy</button>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-outline" style="flex:1;background:#1877f2;color:white;border-color:#1877f2"
-          onclick="window.open('https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}','_blank')">
-          Share to Facebook
+        <button class="btn btn-blue" style="flex:1"
+          onclick="window.open('${shareUrl}','_blank')">
+          Open in New Tab
         </button>
         <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('share-popup').remove()">Close</button>
       </div>
@@ -2675,8 +2676,9 @@ async function checkShareMode() {
   const shareKey = params.get('share');
   if (!shareKey) return false;
 
-  // Show spinner, keep everything else hidden
-
+  // Clear the CSS hide and manually control display
+  const hideStyle = document.getElementById('share-hide-style');
+  if (hideStyle) hideStyle.textContent = '';
   document.querySelector('header').style.display = 'none';
   document.querySelector('.nav-tabs').style.display = 'none';
   document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
@@ -2711,8 +2713,7 @@ async function checkShareMode() {
     S.shooters = data.shooters || [];
     S.scores = data.scores || {};
 
-    // Clear the hide style and restore header
-    document.getElementById('share-hide-style').textContent = '';
+    // Restore header
     document.querySelector('header').style.display = 'flex';
     document.querySelector('header').innerHTML = `
       <div class="header-title">
