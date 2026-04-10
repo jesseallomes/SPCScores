@@ -722,7 +722,12 @@ table.rtable tr:hover td { background: #fafaf8; }
       <div class="night-label" id="header-night">Loading...</div>
     </div>
   </div>
-  <div class="sync-badge pending" id="sync-badge">⟳ Connecting...</div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button id="theme-toggle-btn" onclick="quickToggleTheme()"
+      style="background:transparent;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);border-radius:20px;padding:4px 10px;font-size:14px;cursor:pointer;line-height:1"
+      title="Toggle theme">☀</button>
+    <div class="sync-badge pending" id="sync-badge">⟳ Connecting...</div>
+  </div>
 </header>
 
 <div class="nav-tabs">
@@ -853,10 +858,18 @@ table.rtable tr:hover td { background: #fafaf8; }
 
   <!-- Select from known attendees -->
   <div class="card">
-    <div class="card-title">👤 Select Previous Attendees</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Tick everyone shooting tonight.</div>
-    <div id="member-ticklist"></div>
-    <div style="font-size:12px;color:var(--muted);margin-top:8px">No one showing? Add them below first.</div>
+    <div class="card-title">👤 Members</div>
+    <div style="position:relative;margin-bottom:8px">
+      <input type="text" id="member-search" placeholder="Search members..."
+        style="margin-bottom:0;padding-left:32px"
+        oninput="filterMemberTicklist(this.value)">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
+    </div>
+    <div id="member-ticklist" style="max-height:250px;overflow-y:auto"></div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--muted)">👥 Visitors</div>
+    <div id="visitor-ticklist" style="max-height:120px;overflow-y:auto"></div>
   </div>
 
   <!-- Manual entry for new shooters -->
@@ -875,12 +888,18 @@ table.rtable tr:hover td { background: #fafaf8; }
     </div>
   </div>
 
-  <button class="btn btn-red btn-block" onclick="confirmShooters()">✓ CONFIRM & GO TO SCORES →</button>
+  <button class="btn btn-red btn-block" onclick="confirmShooters()">✓ CONFIRM & GO TO SCORE ENTRY →</button>
 </div>
 
 <!-- ===== SCORES PAGE ===== -->
 <div id="page-scores" class="page">
-  <div id="scores-header-bar" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
+  <div id="scores-header-bar" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
+  <div style="position:relative;margin-bottom:10px">
+    <input type="text" id="score-search" placeholder="Filter shooters..."
+      style="margin-bottom:0;padding-left:32px"
+      oninput="filterScoreCards(this.value)">
+    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)">🔍</span>
+  </div>
   <div id="score-cards-list"></div>
   <div class="card" style="border: 2px dashed var(--border); background: #fafaf8; text-align:center; padding: 20px;">
     <div style="color:var(--muted);margin-bottom:10px;font-size:14px">Need to add someone?</div>
@@ -1459,41 +1478,51 @@ async function loadMembers() {
 }
 
 function renderMemberTicklist() {
-  const el = document.getElementById('member-ticklist');
-  if (!el) return;
-  const members = Object.values(allMembers).sort((a,b) =>
+  const memberEl = document.getElementById('member-ticklist');
+  const visitorEl = document.getElementById('visitor-ticklist');
+  const all = Object.values(allMembers).sort((a,b) =>
     (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||''));
-  if (!members.length) {
-    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No previous attendees yet — add shooters below and they will appear here next time.</div>';
-    return;
-  }
-  // Search filter
-  const filterHtml = `<div style="margin-bottom:8px;position:relative">
-    <input type="text" id="member-search" placeholder="Search name..." 
-      style="margin-bottom:0;padding-left:30px"
-      oninput="filterMemberTicklist(this.value)">
-    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
-  </div>`;
+  const members = all.filter(m => !m.isVisitor);
+  const visitors = all.filter(m => m.isVisitor);
 
-  const memberRows = members.map(m => {
+  function makeRow(m) {
     const checked = selectedMemberIds.has(m.id) ? 'checked' : '';
     const pistolCount = (m.pistols||[]).length;
-    const roBadge = m.isRO ? '<span style="background:var(--gold);color:#000;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">RO</span>' : '';
-    const visBadge = m.isVisitor ? '<span style="background:#888;color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px">VIS</span>' : '';
-    return `<div class="member-tick-row" data-name="${(m.lastName+' '+m.firstName).toLowerCase()}"
-      style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+    const roBadge = m.isRO ? '<span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:5px">RO</span>' : '';
+    return `<div class="member-tick-row" data-name="${((m.lastName||'')+' '+(m.firstName||'')).toLowerCase()}"
+      style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">
       <input type="checkbox" id="tick-${m.id}" ${checked}
         style="width:22px;height:22px;accent-color:var(--accent);cursor:pointer;flex-shrink:0"
         onchange="toggleMemberTick('${m.id}',this.checked)">
       <label for="tick-${m.id}" style="flex:1;cursor:pointer;margin:0;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)">
-        <strong>${m.lastName||''}</strong>, ${m.firstName||''} ${roBadge}${visBadge}
-        <span style="font-size:11px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-left:4px">${pistolCount} pistol${pistolCount!==1?'s':''}</span>
+        <strong>${m.lastName||''}</strong>, ${m.firstName||''} ${roBadge}
+        <span style="font-size:11px;color:var(--muted);margin-left:4px">${pistolCount} pistol${pistolCount!==1?'s':''}</span>
       </label>
     </div>`;
-  }).join('');
+  }
 
-  el.innerHTML = filterHtml + `<div id="member-tick-list-inner">${memberRows}</div>`;
+  if (memberEl) {
+    memberEl.innerHTML = members.length ? members.map(makeRow).join('')
+      : '<div style="color:var(--muted);font-size:13px;padding:10px 4px">No members yet.</div>';
+  }
+  if (visitorEl) {
+    visitorEl.innerHTML = visitors.length ? visitors.map(makeRow).join('')
+      : '<div style="color:var(--muted);font-size:13px;padding:10px 4px">No visitors on file.</div>';
+  }
 }
+
+function toggleMemberTick(mid, checked) {
+  if (checked) selectedMemberIds.add(mid);
+  else selectedMemberIds.delete(mid);
+}
+
+function filterMemberTicklist(query) {
+  const q = (query||'').toLowerCase().trim();
+  document.querySelectorAll('.member-tick-row').forEach(row => {
+    row.style.display = (!q || (row.dataset.name||'').includes(q)) ? 'flex' : 'none';
+  });
+}
+
 
 
 
@@ -1593,31 +1622,6 @@ async function confirmAddMember() {
   renderMemberTicklist();
   if (document.getElementById('page-members').classList.contains('active')) loadMembersList();
   toast(`${first} ${last} saved`, 'success');
-}
-
-function openAddMemberPistolModal(mid) {
-  // Reuse the pistol modal but save directly to member profile
-  document.getElementById('pistol-modal-shooter-id').value = 'MEMBER:' + mid;
-  document.getElementById('pm-make').value = '';
-  document.getElementById('pm-type').value = 'P';
-  document.getElementById('pm-calibre').value = '.22';
-  document.getElementById('pm-class').value = 'S';
-  document.getElementById('pm-calibre-other').value = '';
-  document.getElementById('pm-other-wrap').style.display = 'none';
-  document.getElementById('pm-prev-pistols').style.display = 'none';
-  document.getElementById('pistol-modal').classList.add('open');
-}
-
-function editMember(mid) {
-  const m = allMembers[mid];
-  if (!m) return;
-  document.getElementById('add-member-id').value = mid;
-  document.getElementById('am-first').value = m.firstName||'';
-  document.getElementById('am-last').value = m.lastName||'';
-  if (document.getElementById('am-ro')) document.getElementById('am-ro').checked = m.isRO||false;
-  if (document.getElementById('am-optout')) document.getElementById('am-optout').checked = m.optOutPistols||false;
-  document.getElementById('add-member-title').textContent = 'Edit Member';
-  document.getElementById('add-member-modal').classList.add('open');
 }
 
 // ====================================================
@@ -2095,6 +2099,14 @@ function confirmAddPistol() {
   closePistolModal();
   syncToFirebase();
   reRenderShooterCard(sid);
+}
+
+function filterScoreCards(query) {
+  const q = (query||'').toLowerCase().trim();
+  document.querySelectorAll('.shooter-score-card').forEach(card => {
+    const name = (card.querySelector('.scard-name')?.textContent||'').toLowerCase();
+    card.style.display = (!q || name.includes(q)) ? '' : 'none';
+  });
 }
 
 function reRenderShooterCard(sid) {
@@ -2609,8 +2621,7 @@ async function checkShareMode() {
   if (!shareKey) return false;
 
   // Show spinner, keep everything else hidden
-  document.documentElement.classList.remove('share-loading');
-  document.body.style.visibility = 'visible';
+
   document.querySelector('header').style.display = 'none';
   document.querySelector('.nav-tabs').style.display = 'none';
   document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
@@ -2645,7 +2656,8 @@ async function checkShareMode() {
     S.shooters = data.shooters || [];
     S.scores = data.scores || {};
 
-    // Restore header with share branding
+    // Clear the hide style and restore header
+    document.getElementById('share-hide-style').textContent = '';
     document.querySelector('header').style.display = 'flex';
     document.querySelector('header').innerHTML = `
       <div class="header-title">
@@ -2663,6 +2675,14 @@ async function checkShareMode() {
     resultsPage.style.margin = '0 auto';
     renderResults();
     resultsPage.querySelector('.no-print')?.remove();
+
+    // Add export bar
+    const exportBar = document.createElement('div');
+    exportBar.style.cssText = 'display:flex;gap:10px;justify-content:center;padding:16px;flex-wrap:wrap';
+    exportBar.innerHTML = `
+      <button class="btn btn-dark" onclick="window.print()">🖨 Print / Save PDF</button>
+      <button class="btn btn-green" onclick="exportReadOnlyExcel()">📊 Export Excel</button>`;
+    resultsPage.appendChild(exportBar);
     return true;
   } catch(e) {
     console.error('Share load error:', e);
@@ -2768,6 +2788,8 @@ function applyTheme(theme) {
     root.style.setProperty('--muted', '#666');
   }
   updateThemeButtons();
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.textContent = theme === 'dark' ? '🌙' : theme === 'light' ? '☀' : '📱';
 }
 
 function updateThemeButtons() {
@@ -2782,6 +2804,11 @@ async function setTheme(theme) {
   CFG.theme = theme;
   applyTheme(theme);
   await saveSettings();
+}
+
+function quickToggleTheme() {
+  const next = CFG.theme === 'dark' ? 'light' : CFG.theme === 'light' ? 'auto' : 'dark';
+  setTheme(next);
 }
 
 // ====================================================
@@ -2904,6 +2931,14 @@ function openClubGunsForShooter(sid) {
   }
   document.getElementById('club-guns-shooter-modal').dataset.sid = sid;
   document.getElementById('club-guns-shooter-modal').classList.add('open');
+}
+
+function exportReadOnlyExcel() {
+  const wb = XLSX.utils.book_new();
+  if (S.steel.on) buildScoreSheet(wb, 'steel');
+  if (S.paper.on) buildScoreSheet(wb, 'paper');
+  XLSX.writeFile(wb, `${S.date||'results'}-${(S.title||'scores').replace(/\s+/g,'-')}.xlsx`);
+  toast('Downloaded!', 'success');
 }
 
 function formatDateDMY(isoDate) {
@@ -3643,15 +3678,18 @@ async function loadHistory() {
   el.innerHTML = '<div class="empty-state">Loading...</div>';
   try {
     // Query all sessions - sort client side to handle missing meta/updated
-    const snap = await db.ref('sessions').limitToLast(50).once('value');
+    const snap = await db.ref('sessions').once('value');
     const sessions = [];
-    snap.forEach(child => sessions.push({ key: child.key, ...child.val() }));
-    // Sort by updated date descending, fall back to key sort
-    sessions.sort((a, b) => (b.meta?.updated || 0) - (a.meta?.updated || 0));
-    const recent = sessions.slice(0, 30);
-    if (!recent.length) { el.innerHTML = '<div class="empty-state">No saved sessions yet</div>'; return; }
-    const sessions_to_show = recent;
-    el.innerHTML = sessions_to_show.map(s => `
+    snap.forEach(child => {
+      const val = child.val();
+      if (val) sessions.push({ key: child.key, ...val });
+    });
+    sessions.sort((a,b) => (b.meta?.updated||0) - (a.meta?.updated||0));
+    if (!sessions.length) {
+      el.innerHTML = '<div class="empty-state">No saved sessions yet.<br><small style="color:var(--muted)">Use Save Session on the Results page.</small></div>';
+      return;
+    }
+    el.innerHTML = sessions.slice(0,30).map(s => `
       <div class="history-item">
         <div>
           <div class="title">${s.meta?.title || s.key}</div>
@@ -3797,8 +3835,7 @@ window.addEventListener('load', () => {
   addNameRow(); addNameRow(); addNameRow();
   // Check for share mode first
   // Make body visible (was hidden if share-loading class applied)
-  document.documentElement.classList.remove('share-loading');
-  document.body.style.visibility = 'visible';
+
 
   setTimeout(async () => {
     if (window.location.search.includes('share=')) {
