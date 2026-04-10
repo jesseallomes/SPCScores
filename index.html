@@ -1467,26 +1467,35 @@ function renderMemberTicklist() {
     el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0">No previous attendees yet — add shooters below and they will appear here next time.</div>';
     return;
   }
-  el.innerHTML = members.map(m => {
+  // Search filter
+  const filterHtml = `<div style="margin-bottom:8px;position:relative">
+    <input type="text" id="member-search" placeholder="Search name..." 
+      style="margin-bottom:0;padding-left:30px"
+      oninput="filterMemberTicklist(this.value)">
+    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
+  </div>`;
+
+  const memberRows = members.map(m => {
     const checked = selectedMemberIds.has(m.id) ? 'checked' : '';
     const pistolCount = (m.pistols||[]).length;
     const roBadge = m.isRO ? '<span style="background:var(--gold);color:#000;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">RO</span>' : '';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+    const visBadge = m.isVisitor ? '<span style="background:#888;color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:4px">VIS</span>' : '';
+    return `<div class="member-tick-row" data-name="${(m.lastName+' '+m.firstName).toLowerCase()}"
+      style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
       <input type="checkbox" id="tick-${m.id}" ${checked}
         style="width:22px;height:22px;accent-color:var(--accent);cursor:pointer;flex-shrink:0"
         onchange="toggleMemberTick('${m.id}',this.checked)">
       <label for="tick-${m.id}" style="flex:1;cursor:pointer;margin:0;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)">
-        <strong>${m.lastName||''}</strong>, ${m.firstName||''} ${roBadge}
+        <strong>${m.lastName||''}</strong>, ${m.firstName||''} ${roBadge}${visBadge}
         <span style="font-size:11px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-left:4px">${pistolCount} pistol${pistolCount!==1?'s':''}</span>
       </label>
     </div>`;
   }).join('');
+
+  el.innerHTML = filterHtml + `<div id="member-tick-list-inner">${memberRows}</div>`;
 }
 
-function toggleMemberTick(mid, checked) {
-  if (checked) selectedMemberIds.add(mid);
-  else selectedMemberIds.delete(mid);
-}
+
 
 function confirmShooters() {
   let added = 0;
@@ -1704,66 +1713,91 @@ function pistolScoreEntry(s, p, pi) {
   if (S.steel.on) {
     const runs = runCount();
     const method = S.steel.method;
-    const stageInputs = Array.from({ length: S.steel.stages }, (_, stg) => {
-      const runInputs = Array.from({ length: runs }, (_, r) => {
-        const val = (scores.steel && scores.steel[`s${stg}_r${r}`]) || '';
-        const label = runs === 1 ? 'Time' : `Run ${r+1}`;
-        return `<div class="zone-col" style="align-items:flex-start">
-          <div class="zone-lbl" style="font-size:10px">${label}</div>
-          <input type="number" step="0.01" min="0" placeholder="0.00"
-            value="${val}" style="width:80px;text-align:center"
-            inputmode="decimal"
-            enterkeyhint="next"
-            oninput="saveScore('${s.id}',${pi},'steel','s${stg}_r${r}',this.value)">
-        </div>`;
-      }).join('');
-      // Show best/avg label per stage
-      const stageTimes = Array.from({length:runs}, (_,r) => parseFloat((scores.steel||{})[`s${stg}_r${r}`])).filter(v=>!isNaN(v)&&v>0);
-      let stageResult = '';
-      if (stageTimes.length === runs) {
-        if (method === 'best2' || method === 'best3') {
-          stageResult = `<span style="font-size:11px;color:var(--accent2);margin-left:8px">Best: ${Math.min(...stageTimes).toFixed(2)}s</span>`;
-        } else if (method === 'avg2' || method === 'avg3') {
-          stageResult = `<span style="font-size:11px;color:var(--accent2);margin-left:8px">Avg: ${(stageTimes.reduce((a,b)=>a+b,0)/stageTimes.length).toFixed(2)}s</span>`;
-        }
-      }
-      return `${S.steel.stages > 1 ? `<div style="font-size:11px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-bottom:4px">Stage ${stg+1}</div>` : ''}
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:4px">${runInputs}${stageResult}</div>`;
-    }).join('');
-
-    // Penalty inputs
-    const penaltyVal = (scores.steel && scores.steel.penalties) || 0;
     const penaltyTime = S.steel.penalty || 5;
     const hasMiss = S.steel.penaltyMiss && !S.steel.shootToHit;
     const hasOOS = S.steel.penaltyOOS;
-    let penaltyHtml = '';
-    if (hasMiss || hasOOS) {
-      penaltyHtml = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;padding:6px 8px;background:rgba(200,55,45,0.06);border-radius:5px;border:1px solid rgba(200,55,45,0.2)">
-        <span style="font-size:11px;font-weight:700;color:var(--accent);font-family:'Roboto Mono',monospace;text-transform:uppercase">Penalties</span>
-        ${hasMiss ? `<div style="display:flex;align-items:center;gap:4px">
-          <span style="font-size:11px;color:var(--muted)">Miss</span>
-          <input type="number" min="0" max="99" placeholder="0" value="${(scores.steel&&scores.steel.penaltyMiss)||''}"
-            inputmode="numeric" pattern="[0-9]*" enterkeyhint="next"
-            style="width:48px;text-align:center;margin:0;padding:4px;font-family:'Roboto Mono',monospace;font-weight:700"
-            oninput="savePenalty('${s.id}',${pi},'penaltyMiss',this.value)">
-        </div>` : ''}
-        ${hasOOS ? `<div style="display:flex;align-items:center;gap:4px">
-          <span style="font-size:11px;color:var(--muted)">OOS</span>
-          <input type="number" min="0" max="99" placeholder="0" value="${(scores.steel&&scores.steel.penaltyOOS)||''}"
-            inputmode="numeric" pattern="[0-9]*" enterkeyhint="next"
-            style="width:48px;text-align:center;margin:0;padding:4px;font-family:'Roboto Mono',monospace;font-weight:700"
-            oninput="savePenalty('${s.id}',${pi},'penaltyOOS',this.value)">
-        </div>` : ''}
-        <span style="font-size:11px;color:var(--accent);font-family:'Roboto Mono',monospace" id="penalty-total-${s.id}-${pi}"></span>
-      </div>`;
-    }
+    const multiRun = runs > 1;
+
+    const stageInputs = Array.from({ length: S.steel.stages }, (_, stg) => {
+      // Each run gets its own column: Time + (penalty boxes if multi-run)
+      const runCols = Array.from({ length: runs }, (_, r) => {
+        const val = (scores.steel && scores.steel[`s${stg}_r${r}`]) || '';
+        const pMiss = (scores.steel && scores.steel[`s${stg}_r${r}_miss`]) || '';
+        const pOOS  = (scores.steel && scores.steel[`s${stg}_r${r}_oos`])  || '';
+        const label = runs === 1 ? 'Time' : `Run ${r+1}`;
+
+        // Per-run penalty total
+        const mVal = parseInt(pMiss)||0;
+        const oVal = parseInt(pOOS)||0;
+        const runPenSec = (mVal+oVal)*penaltyTime;
+        const rawTime = parseFloat(val);
+        const adjTime = !isNaN(rawTime) && rawTime > 0 ? rawTime + runPenSec : null;
+
+        const penBoxes = (multiRun && (hasMiss || hasOOS)) ? `
+          <div style="display:flex;gap:3px;margin-top:3px;align-items:center">
+            ${hasMiss ? `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+              <span style="font-size:8px;color:var(--muted);font-family:'Roboto Mono',monospace">MISS</span>
+              <input type="number" min="0" max="99" placeholder="0" value="${pMiss}"
+                inputmode="numeric" pattern="[0-9]*" enterkeyhint="next"
+                style="width:38px;text-align:center;margin:0;padding:3px 2px;font-family:'Roboto Mono',monospace;font-weight:700;font-size:13px;border:1.5px solid var(--border);border-radius:4px"
+                oninput="savePenalty('${s.id}',${pi},'s${stg}_r${r}_miss',this.value)">
+            </div>` : ''}
+            ${hasOOS ? `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+              <span style="font-size:8px;color:var(--muted);font-family:'Roboto Mono',monospace">OOS</span>
+              <input type="number" min="0" max="99" placeholder="0" value="${pOOS}"
+                inputmode="numeric" pattern="[0-9]*" enterkeyhint="next"
+                style="width:38px;text-align:center;margin:0;padding:3px 2px;font-family:'Roboto Mono',monospace;font-weight:700;font-size:13px;border:1.5px solid var(--border);border-radius:4px"
+                oninput="savePenalty('${s.id}',${pi},'s${stg}_r${r}_oos',this.value)">
+            </div>` : ''}
+          </div>
+          ${adjTime !== null && runPenSec > 0 ? `<div style="font-size:9px;color:var(--accent);font-family:'Roboto Mono',monospace;margin-top:2px">${adjTime.toFixed(2)}s adj</div>` : ''}
+        ` : '';
+
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div class="zone-lbl" style="font-size:10px">${label}</div>
+          <input type="number" step="0.01" min="0" placeholder="0.00"
+            value="${val}" style="width:78px;text-align:center"
+            inputmode="decimal" enterkeyhint="next"
+            oninput="saveScore('${s.id}',${pi},'steel','s${stg}_r${r}',this.value)">
+          ${penBoxes}
+        </div>`;
+      }).join('');
+
+      // Single-run penalties (shown below if only 1 run)
+      let singlePenHtml = '';
+      if (!multiRun && (hasMiss || hasOOS)) {
+        const pMiss = (scores.steel && scores.steel[`s${stg}_r0_miss`]) || '';
+        const pOOS  = (scores.steel && scores.steel[`s${stg}_r0_oos`])  || '';
+        singlePenHtml = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;padding:5px 8px;background:rgba(200,55,45,0.06);border-radius:5px;border:1px solid rgba(200,55,45,0.2)">
+          <span style="font-size:11px;font-weight:700;color:var(--accent);font-family:'Roboto Mono',monospace">PENALTIES</span>
+          ${hasMiss ? `<div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:11px;color:var(--muted)">Miss</span>
+            <input type="number" min="0" max="99" placeholder="0" value="${pMiss}"
+              inputmode="numeric" enterkeyhint="next"
+              style="width:48px;text-align:center;margin:0;padding:4px;font-family:'Roboto Mono',monospace;font-weight:700"
+              oninput="savePenalty('${s.id}',${pi},'s${stg}_r0_miss',this.value)">
+          </div>` : ''}
+          ${hasOOS ? `<div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:11px;color:var(--muted)">OOS</span>
+            <input type="number" min="0" max="99" placeholder="0" value="${pOOS}"
+              inputmode="numeric" enterkeyhint="next"
+              style="width:48px;text-align:center;margin:0;padding:4px;font-family:'Roboto Mono',monospace;font-weight:700"
+              oninput="savePenalty('${s.id}',${pi},'s${stg}_r0_oos',this.value)">
+          </div>` : ''}
+          <span style="font-size:11px;color:var(--accent);font-family:'Roboto Mono',monospace" id="penalty-total-${s.id}-${pi}"></span>
+        </div>`;
+      }
+
+      return `${S.steel.stages > 1 ? `<div style="font-size:11px;color:var(--muted);font-family:'Roboto Mono',monospace;margin-bottom:4px">Stage ${stg+1}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-bottom:4px">${runCols}</div>
+        ${singlePenHtml}`;
+    }).join('');
 
     const stlRes = calcSteel(s.id, pi);
     const methodLabel2 = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Time';
     steelHtml = `<div style="margin-bottom:10px">
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--accent2);margin-bottom:6px">[T] ${S.steel.name}</div>
       ${stageInputs}
-      ${penaltyHtml}
       <div class="score-result" id="steel-res-${s.id}-${pi}">${stlRes !== null ? `${methodLabel2}: ${stlRes.toFixed(2)}s` : ''}</div>
     </div>`;
   }
@@ -1840,33 +1874,33 @@ function saveScore(sid, pi, comp, key, val) {
   syncToFirebase();
 }
 
-function savePenalty(sid, pi, type, val) {
+function savePenalty(sid, pi, key, val) {
   if (!S.scores[sid]) S.scores[sid] = {};
   if (!S.scores[sid][pi]) S.scores[sid][pi] = {};
   if (!S.scores[sid][pi].steel) S.scores[sid][pi].steel = {};
-  S.scores[sid][pi].steel[type] = parseInt(val) || 0;
-  updatePenaltyDisplay(sid, pi);
+  S.scores[sid][pi].steel[key] = parseInt(val) || 0;
+  // Update final score display
   const res = calcSteel(sid, pi);
   const el = document.getElementById(`steel-res-${sid}-${pi}`);
-  if (el && res !== null) {
+  if (el) {
     const method = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[S.steel.method]||'Time';
-    el.textContent = `${method}: ${res.toFixed(2)}s`;
+    el.textContent = res !== null ? `${method}: ${res.toFixed(2)}s` : '';
+  }
+  // Single-run penalty total display
+  const totEl = document.getElementById(`penalty-total-${sid}-${pi}`);
+  if (totEl) {
+    const sc = S.scores[sid][pi].steel;
+    const pt = S.steel.penalty || 5;
+    const stages = S.steel.stages || 1;
+    let totalPen = 0;
+    for (let stg = 0; stg < stages; stg++) {
+      const m = parseInt(sc[`s${stg}_r0_miss`])||0;
+      const o = parseInt(sc[`s${stg}_r0_oos`])||0;
+      totalPen += (m+o)*pt;
+    }
+    totEl.textContent = totalPen > 0 ? `+${totalPen.toFixed(1)}s` : '';
   }
   syncToFirebase();
-}
-
-function updatePenaltyDisplay(sid, pi) {
-  const scores = S.scores[sid]?.[pi]?.steel || {};
-  const penaltyTime = S.steel.penalty || 5;
-  const miss = parseInt(scores.penaltyMiss) || 0;
-  const oos = parseInt(scores.penaltyOOS) || 0;
-  const total = (miss + oos) * penaltyTime;
-  const el = document.getElementById(`penalty-total-${sid}-${pi}`);
-  if (el) {
-    el.textContent = (miss + oos) > 0
-      ? `+${total.toFixed(1)}s (${miss+oos}× ${penaltyTime}s)`
-      : '';
-  }
 }
 
 // ====================================================
@@ -3125,12 +3159,25 @@ function calcSteel(sid, pi) {
     else if (method === 'best2' || method === 'best3') total += Math.min(...times);
     else if (method === 'avg2' || method === 'avg3') total += times.reduce((a,b)=>a+b,0)/times.length;
   }
-  // Add penalties
+  // Per-run penalties: each run's time already adjusted, so recalc with them
+  // We need to find the winning run(s) and add their penalties
+  // Recalculate including per-run penalties
   const penaltyTime = S.steel.penalty || 5;
-  const miss = parseInt(sc.penaltyMiss) || 0;
-  const oos = parseInt(sc.penaltyOOS) || 0;
-  total += (miss + oos) * penaltyTime;
-  return total;
+  let totalWithPen = 0;
+  for (let stg = 0; stg < stages; stg++) {
+    const runData = Array.from({length:runs}, (_, r) => {
+      const t = parseFloat(sc[`s${stg}_r${r}`]);
+      const miss = parseInt(sc[`s${stg}_r${r}_miss`]) || 0;
+      const oos  = parseInt(sc[`s${stg}_r${r}_oos`])  || 0;
+      const adj = (!isNaN(t) && t > 0) ? t + (miss + oos) * penaltyTime : null;
+      return adj;
+    }).filter(v => v !== null);
+    if (!runData.length) return null;
+    if (method === 'single' || method === 'first') totalWithPen += runData[0];
+    else if (method === 'best2' || method === 'best3') totalWithPen += Math.min(...runData);
+    else if (method === 'avg2' || method === 'avg3') totalWithPen += runData.reduce((a,b)=>a+b,0)/runData.length;
+  }
+  return totalWithPen;
 }
 
 function calcPaper(sid, pi) {
@@ -3595,11 +3642,16 @@ async function loadHistory() {
   }
   el.innerHTML = '<div class="empty-state">Loading...</div>';
   try {
-    const snap = await db.ref('sessions').orderByChild('meta/updated').limitToLast(30).once('value');
+    // Query all sessions - sort client side to handle missing meta/updated
+    const snap = await db.ref('sessions').limitToLast(50).once('value');
     const sessions = [];
-    snap.forEach(child => sessions.unshift({ key: child.key, ...child.val() }));
-    if (!sessions.length) { el.innerHTML = '<div class="empty-state">No saved sessions yet</div>'; return; }
-    el.innerHTML = sessions.map(s => `
+    snap.forEach(child => sessions.push({ key: child.key, ...child.val() }));
+    // Sort by updated date descending, fall back to key sort
+    sessions.sort((a, b) => (b.meta?.updated || 0) - (a.meta?.updated || 0));
+    const recent = sessions.slice(0, 30);
+    if (!recent.length) { el.innerHTML = '<div class="empty-state">No saved sessions yet</div>'; return; }
+    const sessions_to_show = recent;
+    el.innerHTML = sessions_to_show.map(s => `
       <div class="history-item">
         <div>
           <div class="title">${s.meta?.title || s.key}</div>
