@@ -712,7 +712,7 @@ table.rtable tr:hover td { background: #fafaf8; }
 }
 </style>
 </head>
-<body>
+<body onclick="closeDropdownIfOutside(event)">
 
 <header>
   <div class="header-title">
@@ -732,7 +732,7 @@ table.rtable tr:hover td { background: #fafaf8; }
 
 <div class="nav-tabs">
   <button class="nav-tab active" onclick="nav('setup')">⚙ Comp Setup</button>
-  <button class="nav-tab" onclick="nav('shooters')">👤 Shooters</button>
+  <button class="nav-tab" onclick="nav('shooters')">👤 Registration</button>
   <button class="nav-tab" onclick="nav('scores')">📝 Score Entry</button>
   <button class="nav-tab" onclick="nav('results')">🏆 Results</button>
   <button class="nav-tab" onclick="nav('admin')">🔐 Admin</button>
@@ -858,18 +858,23 @@ table.rtable tr:hover td { background: #fafaf8; }
 
   <!-- Select from known attendees -->
   <div class="card">
-    <div class="card-title">👤 Members</div>
-    <div style="position:relative;margin-bottom:8px">
-      <input type="text" id="member-search" placeholder="Search members..."
-        style="margin-bottom:0;padding-left:32px"
-        oninput="filterMemberTicklist(this.value)">
-      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px">🔍</span>
+    <div class="card-title">👤 Select Shooters Tonight</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Type a name to find and add shooters.</div>
+
+    <!-- Dropdown search -->
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="member-search" placeholder="Type name to search..."
+        autocomplete="off"
+        style="margin-bottom:0"
+        oninput="searchMemberDropdown(this.value)"
+        onfocus="searchMemberDropdown(this.value)">
+      <!-- Dropdown results - only shows when typing -->
+      <div id="member-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid var(--accent2);border-top:none;border-radius:0 0 6px 6px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
     </div>
-    <div id="member-ticklist" style="max-height:250px;overflow-y:auto"></div>
-  </div>
-  <div class="card">
-    <div class="card-title" style="color:var(--muted)">👥 Visitors</div>
-    <div id="visitor-ticklist" style="max-height:120px;overflow-y:auto"></div>
+
+    <!-- Selected shooters chips -->
+    <div id="selected-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px"></div>
+    <div id="selected-count" style="font-size:12px;color:var(--muted);margin-top:6px;font-family:'Roboto Mono',monospace"></div>
   </div>
 
   <!-- Manual entry for new shooters -->
@@ -961,7 +966,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     <!-- History sub-page -->
     <div id="admin-tab-history" class="admin-sub-page">
       <div class="section-head">📁 Competition History</div>
-      <div id="history-list"></div>
+      <div id="admin-history-list"></div>
     </div>
 
     <!-- Settings sub-page -->
@@ -1478,37 +1483,82 @@ async function loadMembers() {
 }
 
 function renderMemberTicklist() {
-  const memberEl = document.getElementById('member-ticklist');
-  const visitorEl = document.getElementById('visitor-ticklist');
+  // Just refresh the chips for already-selected members
+  renderSelectedChips();
+}
+
+function searchMemberDropdown(query) {
+  const dropdown = document.getElementById('member-dropdown');
+  if (!dropdown) return;
+  const q = (query||'').toLowerCase().trim();
+
+  if (!q) { dropdown.style.display = 'none'; return; }
+
   const all = Object.values(allMembers).sort((a,b) =>
     (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||''));
-  const members = all.filter(m => !m.isVisitor);
-  const visitors = all.filter(m => m.isVisitor);
 
-  function makeRow(m) {
-    const checked = selectedMemberIds.has(m.id) ? 'checked' : '';
-    const pistolCount = (m.pistols||[]).length;
-    const roBadge = m.isRO ? '<span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:5px">RO</span>' : '';
-    return `<div class="member-tick-row" data-name="${((m.lastName||'')+' '+(m.firstName||'')).toLowerCase()}"
-      style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">
-      <input type="checkbox" id="tick-${m.id}" ${checked}
-        style="width:22px;height:22px;accent-color:var(--accent);cursor:pointer;flex-shrink:0"
-        onchange="toggleMemberTick('${m.id}',this.checked)">
-      <label for="tick-${m.id}" style="flex:1;cursor:pointer;margin:0;text-transform:none;letter-spacing:0;font-size:15px;color:var(--text)">
-        <strong>${m.lastName||''}</strong>, ${m.firstName||''} ${roBadge}
-        <span style="font-size:11px;color:var(--muted);margin-left:4px">${pistolCount} pistol${pistolCount!==1?'s':''}</span>
-      </label>
+  const matches = all.filter(m =>
+    ((m.lastName||'')+' '+(m.firstName||'')).toLowerCase().includes(q) ||
+    ((m.firstName||'')+' '+(m.lastName||'')).toLowerCase().includes(q)
+  );
+
+  if (!matches.length) {
+    dropdown.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">No match — add below as new shooter</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+
+  dropdown.innerHTML = matches.map(m => {
+    const already = selectedMemberIds.has(m.id);
+    const roBadge = m.isRO ? ' <span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">RO</span>' : '';
+    const visBadge = m.isVisitor ? ' <span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">VIS</span>' : '';
+    return `<div onclick="${already ? '' : `addMemberFromDropdown('${m.id}')`}"
+      style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;
+      cursor:${already?'default':'pointer'};background:${already?'#f5f5f5':'white'};opacity:${already?'0.5':'1'}">
+      <span style="font-size:15px"><strong>${m.lastName||''}</strong>, ${m.firstName||''}${roBadge}${visBadge}</span>
+      <span style="font-size:13px;color:${already?'var(--muted)':'var(--accent2)'}">
+        ${already ? '✓ Added' : '+ Add'}
+      </span>
     </div>`;
-  }
+  }).join('');
+  dropdown.style.display = 'block';
+}
 
-  if (memberEl) {
-    memberEl.innerHTML = members.length ? members.map(makeRow).join('')
-      : '<div style="color:var(--muted);font-size:13px;padding:10px 4px">No members yet.</div>';
+function addMemberFromDropdown(mid) {
+  selectedMemberIds.add(mid);
+  document.getElementById('member-search').value = '';
+  document.getElementById('member-dropdown').style.display = 'none';
+  renderSelectedChips();
+}
+
+function renderSelectedChips() {
+  const el = document.getElementById('selected-chips');
+  const countEl = document.getElementById('selected-count');
+  if (!el) return;
+  if (!selectedMemberIds.size) {
+    el.innerHTML = '<span style="color:var(--muted);font-size:13px">No shooters selected yet</span>';
+    if (countEl) countEl.textContent = '';
+    return;
   }
-  if (visitorEl) {
-    visitorEl.innerHTML = visitors.length ? visitors.map(makeRow).join('')
-      : '<div style="color:var(--muted);font-size:13px;padding:10px 4px">No visitors on file.</div>';
-  }
+  el.innerHTML = [...selectedMemberIds].map(mid => {
+    const m = allMembers[mid];
+    if (!m) return '';
+    return `<div style="display:inline-flex;align-items:center;gap:6px;background:var(--accent2);color:white;
+      padding:6px 10px;border-radius:20px;font-size:13px;font-family:'Roboto Condensed',sans-serif;font-weight:700">
+      ${m.firstName} ${m.lastName}
+      <button onclick="removeMemberChip('${mid}')"
+        style="background:transparent;border:none;color:rgba(255,255,255,0.8);cursor:pointer;font-size:14px;padding:0;line-height:1">×</button>
+    </div>`;
+  }).filter(Boolean).join('');
+  if (countEl) countEl.textContent = `${selectedMemberIds.size} shooter${selectedMemberIds.size!==1?'s':''} selected`;
+}
+
+function removeMemberChip(mid) {
+  selectedMemberIds.delete(mid);
+  renderSelectedChips();
+  // Re-run search to update dropdown if open
+  const search = document.getElementById('member-search');
+  if (search && search.value) searchMemberDropdown(search.value);
 }
 
 function toggleMemberTick(mid, checked) {
@@ -1516,12 +1566,15 @@ function toggleMemberTick(mid, checked) {
   else selectedMemberIds.delete(mid);
 }
 
-function filterMemberTicklist(query) {
-  const q = (query||'').toLowerCase().trim();
-  document.querySelectorAll('.member-tick-row').forEach(row => {
-    row.style.display = (!q || (row.dataset.name||'').includes(q)) ? 'flex' : 'none';
-  });
+function closeDropdownIfOutside(e) {
+  const search = document.getElementById('member-search');
+  const dropdown = document.getElementById('member-dropdown');
+  if (dropdown && search && !search.contains(e.target) && !dropdown.contains(e.target)) {
+    dropdown.style.display = 'none';
+  }
 }
+
+function filterMemberTicklist(query) { /* replaced by searchMemberDropdown */ }
 
 
 
@@ -1861,7 +1914,9 @@ function saveScore(sid, pi, comp, key, val) {
     if (el) el.textContent = res ? `${res.display} = ${res.total.toFixed(2)} pts` : '';
     // Shot count warning
     if (res) {
-      const totalShots = Object.values(res.vals).reduce((a,b)=>a+b,0);
+      // X is inside the 10 ring — don't count X separately, only count 10,9,8,7,6
+      const { X, ...nonX } = res.vals;
+      const totalShots = Object.values(nonX).reduce((a,b)=>a+b,0);
       const maxShots = S.paper.shots || 12;
       const warn = document.getElementById(`paper-shot-warn-${sid}-${pi}`);
       if (warn) {
@@ -3670,7 +3725,8 @@ function listenSession() {
 // HISTORY
 // ====================================================
 async function loadHistory() {
-  const el = document.getElementById('history-list');
+  // Target admin panel history list (not the old standalone page)
+  const el = document.getElementById('admin-history-list') || document.getElementById('history-list');
   if (!db || !isFirebaseReady) {
     el.innerHTML = '<div class="empty-state">Firebase not connected - history requires live sync</div>';
     return;
