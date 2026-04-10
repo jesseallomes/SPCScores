@@ -1014,7 +1014,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     <div id="admin-tab-members" class="admin-sub-page" style="display:none">
       <div class="section-head">👥 Regular Shooters & Visitors</div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <button class="btn btn-red btn-sm" onclick="editMember(null)">+ Add Member</button>
+        <button class="btn btn-red btn-sm" onclick="openMemberModal(null)">+ Add Member</button>
         <button class="btn btn-outline btn-sm" onclick="loadMembersList()">↻ Refresh</button>
       </div>
       <div id="members-list-content"></div>
@@ -1647,12 +1647,20 @@ function confirmShooters() {
 // MEMBER MODAL (add/edit)
 // ====================================================
 function openAddMemberModal(standalone) {
-  document.getElementById('add-member-id').value = '';
-  document.getElementById('am-first').value = '';
-  document.getElementById('am-last').value = '';
-  if (document.getElementById('am-ro')) document.getElementById('am-ro').checked = false;
-  if (document.getElementById('am-optout')) document.getElementById('am-optout').checked = false;
-  document.getElementById('add-member-title').textContent = 'Add New Member';
+  openMemberModal(null);
+}
+
+function openMemberModal(mid) {
+  const m = mid ? (allMembers[mid] || null) : null;
+  document.getElementById('add-member-id').value = mid || '';
+  document.getElementById('am-first').value = m ? (m.firstName||'') : '';
+  document.getElementById('am-last').value = m ? (m.lastName||'') : '';
+  // Always explicitly set both checkboxes from member data or false
+  const roEl = document.getElementById('am-ro');
+  const optEl = document.getElementById('am-optout');
+  if (roEl) roEl.checked = m ? (m.isRO||false) : false;
+  if (optEl) optEl.checked = m ? (m.optOutPistols||false) : false;
+  document.getElementById('add-member-title').textContent = m ? 'Edit Member' : 'Add New Member';
   document.getElementById('add-member-modal').classList.add('open');
 }
 
@@ -2285,12 +2293,16 @@ async function loadMembersList() {
   }
   const el = document.getElementById('members-list-content');
   if (!el) return;
-  const members = Object.values(allMembers).sort((a,b) =>
-    a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
-  if (!members.length) {
+  const all = Object.values(allMembers).sort((a,b) =>
+    (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||''));
+  const members = all.filter(m => !m.isVisitor);
+  const visitors = all.filter(m => m.isVisitor);
+  if (!all.length) {
     el.innerHTML = '<div class="empty-state">No members yet.</div>'; return;
   }
-  el.innerHTML = members.map(m => {
+
+  // Render a section for members and a section for visitors
+  const renderGroup = (group) => group.map(m => {
     const pistols = (m.pistols || []);
     const pistolList = pistols.map((p, pi) => {
       const cat = getCatInfo(p.calibre, p.cls, p.type);
@@ -3894,14 +3906,17 @@ window.addEventListener('load', () => {
   // Make body visible (was hidden if share-loading class applied)
 
 
-  setTimeout(async () => {
-    if (window.location.search.includes('share=')) {
-      await checkShareMode();
-    } else if (isFirebaseReady) {
-      loadMembers();
-      loadSettings();
-    }
-  }, 800);
+  // Check share mode immediately - doesn't need Firebase to start
+  if (window.location.search.includes('share=')) {
+    checkShareMode();
+  } else {
+    setTimeout(() => {
+      if (isFirebaseReady) {
+        loadMembers();
+        loadSettings();
+      }
+    }, 800);
+  }
   // Year selector initialised when Annual tab opens
 });
 
