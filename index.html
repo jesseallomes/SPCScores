@@ -211,15 +211,22 @@ input[type=text], input[type=number], input[type=email], select, input[type=date
   padding: 10px 12px;
   border: 1.5px solid var(--border);
   border-radius: 5px;
-  background: var(--input-bg);
+  background: var(--input-bg) !important;
   font-family: 'Roboto', sans-serif;
   font-size: 15px;
-  color: var(--text);
+  color: var(--text) !important;
   margin-bottom: 12px;
   transition: border-color 0.15s;
   -webkit-appearance: none;
-  color-scheme: light dark;
+  -webkit-text-fill-color: var(--text) !important;
 }
+input[type=text]:focus, input[type=number]:focus, input[type=email]:focus,
+select:focus, input[type=date]:focus {
+  background: var(--input-bg) !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+input::placeholder { color: var(--muted) !important; -webkit-text-fill-color: var(--muted) !important; }
 
 input:focus, select:focus {
   outline: none;
@@ -461,6 +468,7 @@ input:focus, select:focus {
   border-radius: 0 0 8px 8px;
   box-shadow: var(--shadow);
   overflow-x: auto;
+  border: 1px solid var(--border);
   -webkit-overflow-scrolling: touch;
   margin-bottom: 24px;
 }
@@ -929,7 +937,6 @@ table.rtable tr:hover td { background: #fafaf8; }
     <button class="btn btn-blue" onclick="emailResults()">📧 Email Results</button>
     <button class="btn btn-red" onclick="saveSession()">💾 Save Session</button>
     <button class="btn btn-outline" style="background:#1877f2;color:white;border-color:#1877f2" onclick="shareResults()">📤 Share Results</button>
-    <button class="btn btn-outline btn-sm" style="color:var(--muted);border-color:var(--muted)" onclick="masterClear()">🗑 Master Clear</button>
   </div>
 </div>
 
@@ -2745,10 +2752,13 @@ async function checkShareMode() {
       </div>
       <div class="sync-badge ok">● Results</div>`;
 
-    // Inject CSS to force page-results visible, overriding !important rule
+    const resultsPage = document.getElementById('page-results');
+
+    // Force visible - inject style tag to beat CSS !important
     const showStyle = document.createElement('style');
     showStyle.textContent = '#page-results { display: block !important; max-width: 860px; margin: 0 auto; }';
     document.head.appendChild(showStyle);
+
     renderResults();
     resultsPage.querySelector('.no-print')?.remove();
 
