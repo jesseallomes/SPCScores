@@ -1796,30 +1796,24 @@ function renderScoreCards() {
   const infoBar = document.getElementById('scores-header-bar');
   const list = document.getElementById('score-cards-list');
 
-  // Build [T] / [P] toggle buttons in header bar
+  // Build [T] / [P] toggle buttons (these ARE the info bar)
   if (infoBar) {
     const mode = window._scoreMode || 'both';
     let toggleHtml = '';
     if (S.steel.on) {
       const active = mode === 'steel' || mode === 'both';
       toggleHtml += `<button onclick="toggleCompMode('steel')"
-        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:4px 12px;border-radius:5px;cursor:pointer;border:2px solid var(--accent2);
-        background:${active?'var(--accent2)':'transparent'};color:${active?'white':'var(--accent2)'};">[T] ${S.steel.name||'Steel'}</button>`;
+        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:2px solid var(--accent2);
+        background:${active?'var(--accent2)':'transparent'};color:${active?'white':'var(--accent2)'};">[T] ${S.steel.name||'Steel'} - ${methodLabel(S.steel.method)}</button>`;
     }
     if (S.paper.on) {
       const active = mode === 'paper' || mode === 'both';
       toggleHtml += `<button onclick="toggleCompMode('paper')"
-        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:4px 12px;border-radius:5px;cursor:pointer;border:2px solid var(--green);
-        background:${active?'var(--green)':'transparent'};color:${active?'white':'var(--green)'};">[P] ${S.paper.name||'Paper'}</button>`;
+        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:2px solid var(--green);
+        background:${active?'var(--green)':'transparent'};color:${active?'white':'var(--green)'};">[P] ${S.paper.name||'Paper'} - ${S.paper.shots} shots</button>`;
     }
     infoBar.innerHTML = toggleHtml;
   }
-
-  // Info chips
-  let chips = '';
-  if (S.steel.on) chips += `<div style="background:var(--panel2);color:white;padding:6px 12px;border-radius:4px;font-size:12px;font-family:'Roboto Mono',monospace">[T] ${S.steel.name} - ${methodLabel(S.steel.method)}</div>`;
-  if (S.paper.on) chips += `<div style="background:var(--green);color:white;padding:6px 12px;border-radius:4px;font-size:12px;font-family:'Roboto Mono',monospace">[P] ${S.paper.name} - ${S.paper.shots} shots</div>`;
-  infoBar.innerHTML = chips;
 
   if (!S.shooters.length) {
     list.innerHTML = '<div class="empty-state">No shooters added yet. Go to Shooters tab first.</div>';
