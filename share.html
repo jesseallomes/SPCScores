@@ -27,7 +27,7 @@ header .sub { font-size: 11px; opacity: 0.7; margin-top: 2px; }
 .rtable th { background: #243447; color: white; padding: 10px 14px; font-family: 'Roboto Condensed', sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; text-align: left; }
 .rtable td { padding: 12px 14px; border-bottom: 1px solid #eee; font-size: 14px; color: #1a1a1a; }
 .rtable tr:last-child td { border-bottom: none; }
-.cat-row td { background: #e8eef4; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #334; padding: 10px 14px; }
+.cat-row td { background: #e8eef4; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #1a1a1a; padding: 10px 14px; }
 .section-divider-row td { background: #1c2b3a; color: white; padding: 8px 14px; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 .rank-badge { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: 'Roboto Condensed', sans-serif; }
 .rk1 { background: #f0c040; color: #5a3d00; }
@@ -246,9 +246,25 @@ function sortedByCategory(entries) {
 function resultRow(e, i, isSteel) {
   const rank = i + 1;
   const rkCls = rank===1?'rk1':rank===2?'rk2':rank===3?'rk3':'rk-other';
-  const scoreStr = isSteel
-    ? `<strong>${e.score.toFixed(2)}s</strong>`
-    : `<strong>${e.score.total.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--muted)">${e.score.display}</span>`;
+  let scoreStr;
+  if (isSteel) {
+    const runs = getRunData(e.shooter.id, e.pi);
+    const method = S.steel.method;
+    const methodLabel = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Time';
+    const runTimes = runs.filter(r => r.adj !== null);
+    const isSingleRun = runTimes.length <= 1;
+    let runsHtml = '';
+    if (!isSingleRun) {
+      runsHtml = '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">' +
+        runTimes.map((r,ri) => {
+          const penLabel = r.penSec > 0 ? `<span style="color:var(--accent);font-size:10px"> +${r.penSec.toFixed(0)}s</span>` : '';
+          return `Run ${ri+1}: ${r.adj.toFixed(2)}s${penLabel}`;
+        }).join(' &nbsp;|&nbsp; ') + '</div>';
+    }
+    scoreStr = runsHtml + `<strong>${methodLabel}: ${e.score.toFixed(2)}s</strong>`;
+  } else {
+    scoreStr = `<strong>${e.score.total.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--muted)">${e.score.display}</span>`;
+  }
   return `<tr>
     <td><span class="rank-num ${rkCls}">${rank}</span></td>
     <td><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong></td>
@@ -296,7 +312,7 @@ function buildResultSection(type, entries) {
       </table>
     </div>
 
-    <div class="results-section-title" style="background:var(--accent2)">${icon} ${name.toUpperCase()} - BY CATEGORY</div>
+    <div class="results-section-title" style="background:#2a6faa">${icon} ${name.toUpperCase()} - BY CATEGORY</div>
     <div class="results-table-wrap" style="margin-bottom:28px">
       <table class="rtable">
         <thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th><th>${scoreHdr}</th></tr></thead>
@@ -347,23 +363,172 @@ async function init() {
   }
 }
 
-function doExcel() {
-  const wb = XLSX.utils.book_new();
-  ['steel','paper'].forEach(t => {
-    if (!S[t].on) return;
-    const isS = t==='steel';
-    const rows = [['Name','Pistol','Calibre','M/S', isS?'Time (s)':'Score']];
-    getAllEntries(t).forEach(e => rows.push([
-      e.shooter.firstName+' '+e.shooter.lastName,
-      e.pistol.make||'',
-      (e.pistol.type==='R'?e.pistol.calibre+'R':e.pistol.calibre),
-      e.pistol.cls,
-      isS?e.score.toFixed(2):e.score.total.toFixed(2)
-    ]));
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, isS?'Steel':'Paper');
+function getRunData(sid, pi) {
+  const sc = S.scores[sid]?.[pi]?.steel || {};
+  const runs = runCount();
+  const stages = S.steel.stages;
+  const penaltyTime = S.steel.penalty || 5;
+  const result = [];
+  for (let stg = 0; stg < stages; stg++) {
+    for (let r = 0; r < runs; r++) {
+      const raw = parseFloat(sc[`s${stg}_r${r}`]);
+      const miss = parseInt(sc[`s${stg}_r${r}_miss`]) || 0;
+      const oos  = parseInt(sc[`s${stg}_r${r}_oos`])  || 0;
+      const penSec = (miss + oos) * penaltyTime;
+      const adj = (!isNaN(raw) && raw > 0) ? raw + penSec : null;
+      result.push({ stg, r, raw: (!isNaN(raw) && raw > 0) ? raw : null, miss, oos, penSec, adj });
+    }
+  }
+  return result;
+}
+
+function buildScoreSheet(wb, type) {
+  const isSteel = type === 'steel';
+  const compName = isSteel ? (S.steel.name || 'Steel') : (S.paper.name || 'Paper');
+  const method = S.steel.method;
+  const methodStr = {'single':'Single run','first':'First time','best2':'Best of 2','best3':'Best of 3','avg2':'Average of 2','avg3':'Average of 3'}[method]||'';
+  const methodLabel = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Time';
+  const sheetTitle = isSteel
+    ? `${compName} - ${methodStr} - ${formatDateDMY(S.date) || S.date}`
+    : `${compName} - ${formatDateDMY(S.date) || S.date}`;
+  const sheetName = (isSteel ? 'Steel' : 'Paper').slice(0,31);
+  const runs = isSteel ? runCount() : 0;
+  const penaltyTime = S.steel.penalty || 5;
+
+  const allE = getAllEntries(type);
+  const catSorted = sortedByCategory(allE);
+  const groups = new Map();
+  catSorted.forEach(e => {
+    if (!groups.has(e.catKey)) groups.set(e.catKey, []);
+    groups.get(e.catKey).push(e);
   });
-  XLSX.writeFile(wb, (S.date||'results')+'-scores.xlsx');
+
+  // Build column headers
+  let dataHeaders, numCols;
+  if (isSteel) {
+    const runCols = Array.from({length: runs}, (_,r) => `Run ${r+1} (s)`);
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'M/S', ...runCols, methodLabel];
+    numCols = dataHeaders.length;
+  } else {
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'M/S', 'X', '10', '9', '8', '7', '6', 'Score'];
+    numCols = 11;
+  }
+
+  const rows = [];
+  const boldRows = new Set();   // row indices to bold
+  const mergeRows = new Set();  // row indices to merge
+
+  // Title row
+  rows.push([sheetTitle, ...Array(numCols-1).fill('')]);
+  boldRows.add(0); mergeRows.add(0);
+
+  let lastOrdinal = null;
+
+  groups.forEach((items, key) => {
+    const ordinal = items[0].ordinal || 1;
+    const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
+
+    if (ordinal !== lastOrdinal) {
+      lastOrdinal = ordinal;
+      rows.push(Array(numCols).fill(''));  // blank
+      const ordLabel = ordinal === 1 ? '1st Run - Scoring Shoot'
+        : `${['','','2nd','3rd','4th','5th'][ordinal]||ordinal+'th'} Run - Non Scoring`;
+      rows.push([ordLabel, ...Array(numCols-1).fill('')]);
+      boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
+    }
+
+    rows.push(Array(numCols).fill(''));  // blank before category
+    // Category heading row
+    rows.push([items[0].catInfo.label, ...Array(numCols-1).fill('')]);
+    boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
+
+    // Column headers
+    rows.push(dataHeaders);
+    boldRows.add(rows.length-1);
+
+    // Data rows
+    sortedItems.forEach(e => {
+      if (isSteel) {
+        const runData = getRunData(e.shooter.id, e.pi);
+        const runCols = Array.from({length: runs}, (_,r) => {
+          const rd = runData.find(d => d.r === r && d.stg === 0);
+          return rd && rd.adj !== null ? parseFloat(rd.adj.toFixed(2)) : '';
+        });
+        rows.push([
+          `${e.shooter.firstName} ${e.shooter.lastName}`,
+          e.pistol.make || '',
+          e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre,
+          e.pistol.cls,
+          ...runCols,
+          parseFloat(e.score.toFixed(2))
+        ]);
+      } else {
+        const v = e.score.vals || {};
+        rows.push([
+          `${e.shooter.firstName} ${e.shooter.lastName}`,
+          e.pistol.make || '',
+          e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre,
+          e.pistol.cls,
+          v['X']||0, v['10']||0, v['9']||0, v['8']||0, v['7']||0, v['6']||0,
+          parseFloat(e.score.total.toFixed(2))
+        ]);
+      }
+    });
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Merges
+  const merges = [];
+  rows.forEach((row, ri) => {
+    if (mergeRows.has(ri) && row[0] !== '') {
+      merges.push({ s:{r:ri,c:0}, e:{r:ri,c:numCols-1} });
+    }
+  });
+  ws['!merges'] = merges;
+
+  // Apply bold + borders to all cells
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({r:R, c:C});
+      if (!ws[addr]) ws[addr] = {v:'', t:'s'};
+      ws[addr].s = {
+        font: { bold: boldRows.has(R) },
+        border: {
+          top:    {style:'thin', color:{rgb:'CCCCCC'}},
+          bottom: {style:'thin', color:{rgb:'CCCCCC'}},
+          left:   {style:'thin', color:{rgb:'CCCCCC'}},
+          right:  {style:'thin', color:{rgb:'CCCCCC'}}
+        }
+      };
+    }
+  }
+
+  // Column widths
+  const runWidths = isSteel ? Array.from({length:runs}, ()=>({wch:10})) : [];
+  if (isSteel) {
+    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},...runWidths,{wch:14}];
+  } else {
+    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10}];
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+}
+
+function formatDateDMY(isoDate) {
+  if (!isoDate) return '';
+  const [y,m,d] = isoDate.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function doExcel() {
+  try {
+    const wb = XLSX.utils.book_new();
+    if (S.steel.on) buildScoreSheet(wb, 'steel');
+    if (S.paper.on) buildScoreSheet(wb, 'paper');
+    XLSX.writeFile(wb, (S.date||'results')+'-'+(S.title||'scores').replace(/\s+/g,'-')+'.xlsx');
+  } catch(e) { alert('Export failed: '+e.message); }
 }
 
 init();

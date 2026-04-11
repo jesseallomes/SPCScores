@@ -465,6 +465,7 @@ input:focus, select:focus {
 
 .results-table-wrap {
   background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 0 0 8px 8px;
   box-shadow: var(--shadow);
   overflow-x: auto;
@@ -519,6 +520,7 @@ table.rtable tr:hover td { background: #fafaf8; }
 
 .cat-row td {
   background: var(--bg);
+  color: var(--text);
   font-family: 'Roboto Condensed', sans-serif;
   font-weight: 700;
   font-size: 13px;
@@ -3470,12 +3472,49 @@ function buildResultSection(type, entries) {
     </div>`;
 }
 
+
+// Get all individual run times + penalties for a shooter/pistol
+function getRunData(sid, pi) {
+  const sc = S.scores[sid]?.[pi]?.steel || {};
+  const runs = runCount();
+  const stages = S.steel.stages;
+  const penaltyTime = S.steel.penalty || 5;
+  const result = [];
+  for (let stg = 0; stg < stages; stg++) {
+    for (let r = 0; r < runs; r++) {
+      const raw = parseFloat(sc[`s${stg}_r${r}`]);
+      const miss = parseInt(sc[`s${stg}_r${r}_miss`]) || 0;
+      const oos  = parseInt(sc[`s${stg}_r${r}_oos`])  || 0;
+      const penSec = (miss + oos) * penaltyTime;
+      const adj = (!isNaN(raw) && raw > 0) ? raw + penSec : null;
+      result.push({ stg, r, raw: (!isNaN(raw) && raw > 0) ? raw : null, miss, oos, penSec, adj });
+    }
+  }
+  return result;
+}
+
 function resultRow(e, i, isSteel) {
   const rank = i + 1;
   const rkCls = rank===1?'rk1':rank===2?'rk2':rank===3?'rk3':'rk-other';
-  const scoreStr = isSteel
-    ? `<strong>${e.score.toFixed(2)}s</strong>`
-    : `<strong>${e.score.total.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--muted)">${e.score.display}</span>`;
+  let scoreStr;
+  if (isSteel) {
+    const runs = getRunData(e.shooter.id, e.pi);
+    const method = S.steel.method;
+    const methodLabel = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Time';
+    const runTimes = runs.filter(r => r.adj !== null);
+    const isSingleRun = runTimes.length <= 1;
+    let runsHtml = '';
+    if (!isSingleRun) {
+      runsHtml = '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">' +
+        runTimes.map((r,ri) => {
+          const penLabel = r.penSec > 0 ? `<span style="color:var(--accent);font-size:10px"> +${r.penSec.toFixed(0)}s</span>` : '';
+          return `Run ${ri+1}: ${r.adj.toFixed(2)}s${penLabel}`;
+        }).join(' &nbsp;|&nbsp; ') + '</div>';
+    }
+    scoreStr = runsHtml + `<strong>${methodLabel}: ${e.score.toFixed(2)}s</strong>`;
+  } else {
+    scoreStr = `<strong>${e.score.total.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--muted)">${e.score.display}</span>`;
+  }
   return `<tr>
     <td><span class="rank-num ${rkCls}">${rank}</span></td>
     <td><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong></td>
@@ -3503,63 +3542,80 @@ function buildScoreSheet(wb, type) {
   const compName = isSteel ? (S.steel.name || 'Steel') : (S.paper.name || 'Paper');
   const method = S.steel.method;
   const methodStr = {'single':'Single run','first':'First time','best2':'Best of 2','best3':'Best of 3','avg2':'Average of 2','avg3':'Average of 3'}[method]||'';
+  const methodLabel = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Time';
   const sheetTitle = isSteel
     ? `${compName} - ${methodStr} - ${formatDateDMY(S.date) || S.date}`
     : `${compName} - ${formatDateDMY(S.date) || S.date}`;
   const sheetName = (isSteel ? 'Steel' : 'Paper').slice(0,31);
+  const runs = isSteel ? runCount() : 0;
+  const penaltyTime = S.steel.penalty || 5;
 
-  // Get entries sorted by category
   const allE = getAllEntries(type);
   const catSorted = sortedByCategory(allE);
-
-  // Group by catKey maintaining order
   const groups = new Map();
   catSorted.forEach(e => {
     if (!groups.has(e.catKey)) groups.set(e.catKey, []);
     groups.get(e.catKey).push(e);
   });
 
-  // Build rows
+  // Build column headers
+  let dataHeaders, numCols;
+  if (isSteel) {
+    const runCols = Array.from({length: runs}, (_,r) => `Run ${r+1} (s)`);
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'M/S', ...runCols, methodLabel];
+    numCols = dataHeaders.length;
+  } else {
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'M/S', 'X', '10', '9', '8', '7', '6', 'Score'];
+    numCols = 11;
+  }
+
   const rows = [];
-  // Row 1: Sheet title (will be merged)
-  rows.push([sheetTitle, '', '', '', isSteel ? '' : '']);
+  const boldRows = new Set();   // row indices to bold
+  const mergeRows = new Set();  // row indices to merge
+
+  // Title row
+  rows.push([sheetTitle, ...Array(numCols-1).fill('')]);
+  boldRows.add(0); mergeRows.add(0);
 
   let lastOrdinal = null;
 
   groups.forEach((items, key) => {
     const ordinal = items[0].ordinal || 1;
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
-    const catLabel = items[0].catInfo.label;
 
-    // Ordinal section label as its own merged row
     if (ordinal !== lastOrdinal) {
       lastOrdinal = ordinal;
-      rows.push([]); // blank row before new section
-      const ordHeading = ordinal === 1 ? '1st Run - Scoring Shoot' : `${ordinal === 2 ? '2nd' : ordinal === 3 ? '3rd' : ordinal+'th'} Run - Non Scoring`;
-      rows.push([ordHeading, '', '', '', '']);
+      rows.push(Array(numCols).fill(''));  // blank
+      const ordLabel = ordinal === 1 ? '1st Run - Scoring Shoot'
+        : `${['','','2nd','3rd','4th','5th'][ordinal]||ordinal+'th'} Run - Non Scoring`;
+      rows.push([ordLabel, ...Array(numCols-1).fill('')]);
+      boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
     }
 
-    rows.push([]); // blank row before each category table
+    rows.push(Array(numCols).fill(''));  // blank before category
+    // Category heading row
+    rows.push([items[0].catInfo.label, ...Array(numCols-1).fill('')]);
+    boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
 
-    // Category title row (merged)
-    rows.push([catLabel, '', '', '', '']);
-
-    // Header row
-    if (isSteel) {
-      rows.push(['Name', 'Pistol', 'Calibre', 'M/S', 'Time (s)']);
-    } else {
-      rows.push(['Name', 'Pistol', 'Calibre', 'M/S', 'X', '10', '9', '8', '7', '6', 'Score']);
-    }
+    // Column headers
+    rows.push(dataHeaders);
+    boldRows.add(rows.length-1);
 
     // Data rows
-    sortedItems.forEach((e, i) => {
+    sortedItems.forEach(e => {
       if (isSteel) {
+        const runData = getRunData(e.shooter.id, e.pi);
+        const runCols = Array.from({length: runs}, (_,r) => {
+          const rd = runData.find(d => d.r === r && d.stg === 0);
+          return rd && rd.adj !== null ? parseFloat(rd.adj.toFixed(2)) : '';
+        });
         rows.push([
           `${e.shooter.firstName} ${e.shooter.lastName}`,
           e.pistol.make || '',
           e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre,
           e.pistol.cls,
-          e.score.toFixed(2)
+          ...runCols,
+          parseFloat(e.score.toFixed(2))
         ]);
       } else {
         const v = e.score.vals || {};
@@ -3569,7 +3625,7 @@ function buildScoreSheet(wb, type) {
           e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre,
           e.pistol.cls,
           v['X']||0, v['10']||0, v['9']||0, v['8']||0, v['7']||0, v['6']||0,
-          e.score.total.toFixed(2)
+          parseFloat(e.score.total.toFixed(2))
         ]);
       }
     });
@@ -3577,22 +3633,37 @@ function buildScoreSheet(wb, type) {
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
 
-  // Apply merges and bold formatting
+  // Merges
   const merges = [];
-  const numCols = isSteel ? 5 : 11;
-
   rows.forEach((row, ri) => {
-    if (row.length > 0 && row[1] === '' && row[0] !== '') {
-      // This is a title/heading row — merge across all columns
-      merges.push({ s: { r: ri, c: 0 }, e: { r: ri, c: numCols - 1 } });
+    if (mergeRows.has(ri) && row[0] !== '') {
+      merges.push({ s:{r:ri,c:0}, e:{r:ri,c:numCols-1} });
     }
   });
-
   ws['!merges'] = merges;
 
+  // Apply bold + borders to all cells
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({r:R, c:C});
+      if (!ws[addr]) ws[addr] = {v:'', t:'s'};
+      ws[addr].s = {
+        font: { bold: boldRows.has(R) },
+        border: {
+          top:    {style:'thin', color:{rgb:'CCCCCC'}},
+          bottom: {style:'thin', color:{rgb:'CCCCCC'}},
+          left:   {style:'thin', color:{rgb:'CCCCCC'}},
+          right:  {style:'thin', color:{rgb:'CCCCCC'}}
+        }
+      };
+    }
+  }
+
   // Column widths
+  const runWidths = isSteel ? Array.from({length:runs}, ()=>({wch:10})) : [];
   if (isSteel) {
-    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:10}];
+    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},...runWidths,{wch:14}];
   } else {
     ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10}];
   }
