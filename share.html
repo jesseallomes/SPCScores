@@ -322,10 +322,12 @@ function buildResultSection(type, entries) {
       lastOrdinal = ordinal;
       const ordLabel = ordinal === 1 ? '1st Run — Scoring Shoot'
         : `${['','','2nd','3rd','4th','5th'][ordinal]||ordinal+'th'} Run — Non Scoring`;
-      catRows += `<tr><td colspan="${isSteel ? runs+3 : 4}" style="background:var(--panel);color:white;padding:8px 14px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase">${ordLabel}</td></tr>`;
+      const ordCols = isSteel ? runs + 5 : 5;
+      catRows += `<tr><td colspan="${ordCols}" style="background:var(--panel);color:white;padding:8px 14px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase">${ordLabel}</td></tr>`;
     }
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
-    catRows += `<tr class="cat-row"><td colspan="${isSteel ? runs+3 : 4}">${items[0].catInfo.label}</td></tr>`;
+    const totalCols = isSteel ? runs + 5 : 5;
+    catRows += `<tr class="cat-row"><td colspan="${totalCols}">${items[0].catInfo.label}</td></tr>`;
     sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel, runs); });
   });
 

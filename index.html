@@ -913,7 +913,21 @@ table.rtable tr:hover td { background: #fafaf8; }
 <!-- ===== SCORES PAGE ===== -->
 <div id="page-scores" class="page">
   <div id="scores-header-bar" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
-  <div style="position:relative;margin-bottom:10px">
+
+  <!-- Scoring mode selector -->
+  <div id="score-mode-selector" style="display:none;margin-bottom:12px">
+    <div style="background:var(--panel);border-radius:8px;padding:16px;text-align:center">
+      <div style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;color:white;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">What are you scoring tonight?</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:14px">This device will only show the selected competition.</div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="btn" style="background:var(--accent2);color:white;min-width:100px" onclick="setScoreMode('steel')">⏱ Steel Only</button>
+        <button class="btn" style="background:var(--green);color:white;min-width:100px" onclick="setScoreMode('paper')">🎯 Paper Only</button>
+        <button class="btn" style="background:var(--gold);color:#000;min-width:100px" onclick="setScoreMode('both')">📋 Both</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="position:relative;margin-bottom:10px" id="score-search-wrap" style="display:none">
     <input type="text" id="score-search" placeholder="Filter shooters..."
       style="margin-bottom:0;padding-left:32px"
       oninput="filterScoreCards(this.value)">
@@ -1422,6 +1436,74 @@ function updatePenaltyOptions() {
   }
 }
 
+async function checkDateForSession(date) {
+  if (!date || !db || !isFirebaseReady) return;
+  try {
+    const snap = await db.ref('sessions').once('value');
+    const sessions = [];
+    snap.forEach(child => {
+      const val = child.val();
+      if (val && val.meta && val.meta.date === date) {
+        sessions.push({ key: child.key, ...val });
+      }
+    });
+    if (!sessions.length) return; // No sessions for this date - fresh start
+
+    // Sort by most recent
+    sessions.sort((a,b) => (b.meta.updated||0) - (a.meta.updated||0));
+
+    // Build session list for prompt
+    const sessionList = sessions.map((s,i) =>
+      `<div onclick="selectFoundSession(${i})" style="padding:12px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:var(--card)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background='var(--card)'">
+        <div>
+          <div style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:15px">${s.meta.title||s.key}</div>
+          <div style="font-size:12px;color:var(--muted);font-family:'Roboto Mono',monospace">${formatDate(s.meta.date)} · RO: ${s.meta.ro||'—'}</div>
+        </div>
+        <div style="color:var(--accent2);font-size:12px;font-weight:700">LOAD →</div>
+      </div>`
+    ).join('');
+
+    window._foundSessions = sessions;
+
+    // Show popup
+    const popup = document.createElement('div');
+    popup.id = 'session-found-popup';
+    popup.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px';
+    popup.innerHTML = `
+      <div style="background:var(--card);border-radius:10px;padding:0;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.3);overflow:hidden">
+        <div style="background:var(--panel);color:white;padding:14px 16px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:1px;text-transform:uppercase">
+          📁 Session${sessions.length>1?'s':''} Found — ${formatDate(date)}
+        </div>
+        <div style="padding:12px 16px;font-size:13px;color:var(--muted)">
+          Load an existing session or start fresh for this date.
+        </div>
+        <div style="max-height:260px;overflow-y:auto;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+          ${sessionList}
+        </div>
+        <div style="padding:14px 16px;display:flex;gap:10px">
+          <button class="btn btn-outline" style="flex:1" onclick="dismissSessionPopup()">New Session</button>
+        </div>
+      </div>`;
+    document.body.appendChild(popup);
+  } catch(e) {
+    console.error('Session check error:', e);
+  }
+}
+
+function selectFoundSession(idx) {
+  const s = window._foundSessions[idx];
+  if (!s) return;
+  dismissSessionPopup();
+  loadSessionForEditing(s.key);
+}
+
+function dismissSessionPopup() {
+  document.getElementById('session-found-popup')?.remove();
+  window._foundSessions = null;
+  // Clear scoring mode so device gets prompt again
+  localStorage.removeItem('spc_score_mode');
+}
+
 function saveSetupAndGo() {
   S.date = document.getElementById('shoot-date').value || new Date().toISOString().split('T')[0];
   S.title = document.getElementById('shoot-title').value || 'Club Night';
@@ -1724,6 +1806,7 @@ function recalcAttendanceFromPistols() {
 
 function renderScoreCards() {
   recalcAttendanceFromPistols();
+  initScoreMode();
   const infoBar = document.getElementById('scores-header-bar');
   const list = document.getElementById('score-cards-list');
 
@@ -1787,8 +1870,9 @@ function pistolScoreEntry(s, p, pi) {
   const catInfo = getCatInfo(p.calibre, p.cls, p.type);
   const scores = (S.scores[s.id] && S.scores[s.id][pi]) ? S.scores[s.id][pi] : {};
 
+  const mode = window._scoreMode || 'both';
   let steelHtml = '';
-  if (S.steel.on) {
+  if (S.steel.on && (mode === 'steel' || mode === 'both')) {
     const runs = runCount();
     const method = S.steel.method;
     const penaltyTime = S.steel.penalty || 5;
@@ -1881,7 +1965,7 @@ function pistolScoreEntry(s, p, pi) {
   }
 
   let paperHtml = '';
-  if (S.paper.on) {
+  if (S.paper.on && (mode === 'paper' || mode === 'both')) {
     const zones = ['X','10','9','8','7','6'];
     const zoneInputs = zones.map(z => {
       const val = (scores.paper && scores.paper[`z${z}`]) || '';
@@ -1958,29 +2042,20 @@ function savePenalty(sid, pi, key, val) {
   if (!S.scores[sid]) S.scores[sid] = {};
   if (!S.scores[sid][pi]) S.scores[sid][pi] = {};
   if (!S.scores[sid][pi].steel) S.scores[sid][pi].steel = {};
-  S.scores[sid][pi].steel[key] = parseInt(val) || 0;
-  // Update final score display
+  const intVal = parseInt(val) || 0;
+  S.scores[sid][pi].steel[key] = intVal;
   const res = calcSteel(sid, pi);
   const el = document.getElementById(`steel-res-${sid}-${pi}`);
   if (el) {
     const method = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[S.steel.method]||'Time';
     el.textContent = res !== null ? `${method}: ${res.toFixed(2)}s` : '';
   }
-  // Single-run penalty total display
-  const totEl = document.getElementById(`penalty-total-${sid}-${pi}`);
-  if (totEl) {
-    const sc = S.scores[sid][pi].steel;
-    const pt = S.steel.penalty || 5;
-    const stages = S.steel.stages || 1;
-    let totalPen = 0;
-    for (let stg = 0; stg < stages; stg++) {
-      const m = parseInt(sc[`s${stg}_r0_miss`])||0;
-      const o = parseInt(sc[`s${stg}_r0_oos`])||0;
-      totalPen += (m+o)*pt;
-    }
-    totEl.textContent = totalPen > 0 ? `+${totalPen.toFixed(1)}s` : '';
+  updatePenaltyDisplay(sid, pi);
+
+  // Granular write
+  if (db && isFirebaseReady && sessionKey) {
+    db.ref(`sessions/${sessionKey}/scores/${sid}/${pi}/steel/${key}`).set(intVal || null);
   }
-  syncToFirebase();
 }
 
 // ====================================================
@@ -2177,6 +2252,58 @@ function confirmAddPistol() {
   closePistolModal();
   syncToFirebase();
   reRenderShooterCard(sid);
+}
+
+function initScoreMode() {
+  const mode = localStorage.getItem('spc_score_mode');
+  if (mode) {
+    applyScoreMode(mode);
+  } else {
+    // Show selector if we have shooters, otherwise hide
+    const hasSteel = S.steel.on;
+    const hasPaper = S.paper.on;
+    if (hasSteel && hasPaper) {
+      document.getElementById('score-mode-selector').style.display = 'block';
+      document.getElementById('score-search-wrap').style.display = 'none';
+    } else {
+      // Only one comp type - auto-select
+      const mode = hasSteel ? 'steel' : 'paper';
+      setScoreMode(mode);
+    }
+  }
+}
+
+function setScoreMode(mode) {
+  localStorage.setItem('spc_score_mode', mode);
+  document.getElementById('score-mode-selector').style.display = 'none';
+  document.getElementById('score-search-wrap').style.display = 'block';
+  applyScoreMode(mode);
+  renderScoreCards();
+}
+
+function applyScoreMode(mode) {
+  window._scoreMode = mode;
+  // Show a small mode badge with reset option
+  const bar = document.getElementById('scores-header-bar');
+  if (bar) {
+    const modeLabel = mode === 'steel' ? '⏱ Steel Only' : mode === 'paper' ? '🎯 Paper Only' : '📋 Both';
+    const existing = document.getElementById('score-mode-badge');
+    if (existing) existing.remove();
+    const badge = document.createElement('div');
+    badge.id = 'score-mode-badge';
+    badge.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)';
+    badge.innerHTML = `<span style="background:var(--panel);color:white;padding:3px 10px;border-radius:12px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:11px">${modeLabel}</span>
+      <button onclick="resetScoreMode()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline">change</button>`;
+    bar.appendChild(badge);
+  }
+}
+
+function resetScoreMode() {
+  localStorage.removeItem('spc_score_mode');
+  window._scoreMode = null;
+  document.getElementById('score-mode-selector').style.display = 'block';
+  document.getElementById('score-search-wrap').style.display = 'none';
+  document.getElementById('score-mode-badge')?.remove();
 }
 
 function filterScoreCards(query) {
@@ -3462,10 +3589,12 @@ function buildResultSection(type, entries) {
       lastOrdinal = ordinal;
       const ordLabel = ordinal === 1 ? '1st Run — Scoring Shoot'
         : `${['','','2nd','3rd','4th','5th'][ordinal]||ordinal+'th'} Run — Non Scoring`;
-      catRows += `<tr><td colspan="${isSteel ? runs+3 : 4}" style="background:var(--panel);color:white;padding:8px 14px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase">${ordLabel}</td></tr>`;
+      const ordCols = isSteel ? runs + 5 : 5;
+      catRows += `<tr><td colspan="${ordCols}" style="background:var(--panel);color:white;padding:8px 14px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase">${ordLabel}</td></tr>`;
     }
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
-    catRows += `<tr class="cat-row"><td colspan="${isSteel ? runs+3 : 4}">${items[0].catInfo.label}</td></tr>`;
+    const totalCols = isSteel ? runs + 5 : 5;
+    catRows += `<tr class="cat-row"><td colspan="${totalCols}">${items[0].catInfo.label}</td></tr>`;
     sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel, runs); });
   });
 
@@ -3778,6 +3907,9 @@ function listenSession() {
     if (activePage === 'scores') renderScoreCards();
     if (activePage === 'results') renderResults();
     if (activePage === 'attend') renderAttendance();
+    // Always update results quietly in background for live sync indicator
+    document.getElementById('sync-badge').textContent = 'LIVE SYNC ON';
+    document.getElementById('sync-badge').className = 'sync-badge ok';
   });
 }
 
@@ -3849,6 +3981,7 @@ async function loadSessionForEditing(key) {
   syncFormFromState();
   await saveShootersToMembers();
   listenSession();
+  localStorage.removeItem('spc_score_mode'); // Reset mode so device chooses again
 
   // Close admin, go to scores
   nav('scores');
