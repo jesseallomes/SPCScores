@@ -1796,23 +1796,26 @@ function renderScoreCards() {
   const infoBar = document.getElementById('scores-header-bar');
   const list = document.getElementById('score-cards-list');
 
-  // Build [T] / [P] toggle buttons (these ARE the info bar)
+  // Build [T] / [P] toggle buttons
   if (infoBar) {
+    infoBar.innerHTML = '';
     const mode = window._scoreMode || 'both';
-    let toggleHtml = '';
     if (S.steel.on) {
       const active = mode === 'steel' || mode === 'both';
-      toggleHtml += `<button onclick="toggleCompMode('steel')"
-        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:2px solid var(--accent2);
-        background:${active?'var(--accent2)':'transparent'};color:${active?'white':'var(--accent2)'};">[T] ${S.steel.name||'Steel'} - ${methodLabel(S.steel.method)}</button>`;
+      const btn = document.createElement('button');
+      btn.textContent = '[T] ' + (S.steel.name||'Steel') + ' - ' + methodLabel(S.steel.method);
+      btn.onclick = function() { toggleCompMode('steel'); };
+      btn.style.cssText = 'font-family:monospace;font-size:13px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:2px solid var(--accent2);background:' + (active?'var(--accent2)':'transparent') + ';color:' + (active?'white':'var(--accent2)') + ';margin-right:6px';
+      infoBar.appendChild(btn);
     }
     if (S.paper.on) {
       const active = mode === 'paper' || mode === 'both';
-      toggleHtml += `<button onclick="toggleCompMode('paper')"
-        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:2px solid var(--green);
-        background:${active?'var(--green)':'transparent'};color:${active?'white':'var(--green)'};">[P] ${S.paper.name||'Paper'} - ${S.paper.shots} shots</button>`;
+      const btn = document.createElement('button');
+      btn.textContent = '[P] ' + (S.paper.name||'Paper') + ' - ' + S.paper.shots + ' shots';
+      btn.onclick = function() { toggleCompMode('paper'); };
+      btn.style.cssText = 'font-family:monospace;font-size:13px;font-weight:700;padding:5px 14px;border-radius:5px;cursor:pointer;border:2px solid var(--green);background:' + (active?'var(--green)':'transparent') + ';color:' + (active?'white':'var(--green)') + ';';
+      infoBar.appendChild(btn);
     }
-    infoBar.innerHTML = toggleHtml;
   }
 
   if (!S.shooters.length) {
