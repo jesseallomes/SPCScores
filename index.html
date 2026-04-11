@@ -4000,9 +4000,24 @@ async function loadSessionForEditing(key) {
   syncFormFromState();
   await saveShootersToMembers();
   listenSession();
-  localStorage.removeItem('spc_score_mode'); // Reset mode so device chooses again
+  localStorage.removeItem('spc_score_mode');
+  // Write currentSession so live.html follows this session
+  const writeCurrentSession = () => {
+    if (db && isFirebaseReady) {
+      db.ref('currentSession').set(sessionKey);
+    } else {
+      // Retry when Firebase connects
+      const retry = setInterval(() => {
+        if (db && isFirebaseReady) {
+          db.ref('currentSession').set(sessionKey);
+          clearInterval(retry);
+        }
+      }, 500);
+      setTimeout(() => clearInterval(retry), 10000);
+    }
+  };
+  writeCurrentSession();
 
-  // Close admin, go to scores
   nav('scores');
   toast('Session loaded — any save will update this session', 'success');
 }
