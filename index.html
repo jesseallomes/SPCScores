@@ -759,7 +759,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     <div class="row2">
       <div>
         <label>Shoot Date</label>
-        <input type="date" id="shoot-date">
+        <input type="date" id="shoot-date" onchange="checkDateForSession(this.value)">
       </div>
       <div>
         <label>Session Title</label>
@@ -4083,6 +4083,21 @@ window.addEventListener('load', () => {
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('shoot-date').value = today;
   document.getElementById('header-night').textContent = 'New Session';
+  // Check for existing session for today once Firebase is ready
+  setTimeout(async () => {
+    if (db && isFirebaseReady) {
+      await checkDateForSession(today);
+    } else {
+      // Wait for Firebase then check
+      const waitAndCheck = setInterval(async () => {
+        if (db && isFirebaseReady) {
+          clearInterval(waitAndCheck);
+          await checkDateForSession(today);
+        }
+      }, 300);
+      setTimeout(() => clearInterval(waitAndCheck), 8000);
+    }
+  }, 500);
   // Start with 3 blank name rows ready
   addNameRow(); addNameRow(); addNameRow();
   // Check for share mode first
