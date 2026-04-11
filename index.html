@@ -3429,14 +3429,24 @@ function buildResultSection(type, entries) {
   const isSteel = type === 'steel';
   const name = isSteel ? S.steel.name : S.paper.name;
   const icon = isSteel ? '[T]' : '[P]';
+  const runs = isSteel ? runCount() : 0;
+  const method = S.steel.method;
+  const methodLabel = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Best';
 
   if (!entries.length) return `
     <div class="results-section-title">${icon} ${name.toUpperCase()}</div>
     <div class="results-table-wrap"><div class="empty-state">No scores entered</div></div>`;
 
-  const overallRows = entries.slice(0, 3).map((e, i) => resultRow(e, i, isSteel)).join('');
+  // Build column headers
+  const runHeaders = isSteel
+    ? Array.from({length: runs}, (_,r) => `<th>RUN ${r+1}</th>`).join('') + `<th>${methodLabel.toUpperCase()}</th>`
+    : `<th>SCORE</th>`;
+  const tableHeader = `<thead><tr><th>#</th><th>NAME</th><th>PISTOL</th>${isSteel?'':' <th>CAT</th>'}${runHeaders}</tr></thead>`;
 
-  // Group by category - sorted by calibre order then S before M
+  // Overall top entries (all, sorted by score)
+  const overallRows = entries.map((e, i) => resultRow(e, i, isSteel, runs)).join('');
+
+  // By category
   const catSorted = sortedByCategory(entries);
   const groups = new Map();
   catSorted.forEach(e => {
@@ -3445,30 +3455,28 @@ function buildResultSection(type, entries) {
   });
 
   let catRows = '';
+  let lastOrdinal = null;
   groups.forEach((items, key) => {
-    // sort within category by score
+    const ordinal = items[0].ordinal || 1;
+    if (ordinal !== lastOrdinal) {
+      lastOrdinal = ordinal;
+      const ordLabel = ordinal === 1 ? '1st Run — Scoring Shoot'
+        : `${['','','2nd','3rd','4th','5th'][ordinal]||ordinal+'th'} Run — Non Scoring`;
+      catRows += `<tr><td colspan="${isSteel ? runs+3 : 4}" style="background:var(--panel);color:white;padding:8px 14px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase">${ordLabel}</td></tr>`;
+    }
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
-    catRows += `<tr class="cat-row"><td colspan="5">${items[0].catInfo.label}</td></tr>`;
-    sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel); });
+    catRows += `<tr class="cat-row"><td colspan="${isSteel ? runs+3 : 4}">${items[0].catInfo.label}</td></tr>`;
+    sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel, runs); });
   });
-
-  const scoreHdr = isSteel ? 'TIME' : 'SCORE';
 
   return `
     <div class="results-section-title">${icon} ${name.toUpperCase()} - OVERALL</div>
     <div class="results-table-wrap" style="margin-bottom:8px">
-      <table class="rtable">
-        <thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th><th>${scoreHdr}</th></tr></thead>
-        <tbody>${overallRows}</tbody>
-      </table>
+      <table class="rtable">${tableHeader}<tbody>${overallRows}</tbody></table>
     </div>
-
-    <div class="results-section-title" style="background:var(--accent2)">${icon} ${name.toUpperCase()} - BY CATEGORY</div>
+    <div class="results-section-title" style="background:#2a6faa">${icon} ${name.toUpperCase()} - BY CATEGORY</div>
     <div class="results-table-wrap" style="margin-bottom:28px">
-      <table class="rtable">
-        <thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th><th>${scoreHdr}</th></tr></thead>
-        <tbody>${catRows}</tbody>
-      </table>
+      <table class="rtable">${tableHeader}<tbody>${catRows}</tbody></table>
     </div>`;
 }
 
@@ -3493,34 +3501,49 @@ function getRunData(sid, pi) {
   return result;
 }
 
-function resultRow(e, i, isSteel) {
+function resultRow(e, i, isSteel, runs) {
   const rank = i + 1;
-  const rkCls = rank===1?'rk1':rank===2?'rk2':rank===3?'rk3':'rk-other';
-  let scoreStr;
+  // Medal badges - gold biggest, then silver, then bronze
+  const medalStyle = rank === 1
+    ? 'background:#FFD700;color:#5a3d00;width:32px;height:32px;font-size:15px;border:2px solid #c8a400;'
+    : rank === 2
+    ? 'background:#C0C0C0;color:#333;width:28px;height:28px;font-size:13px;border:2px solid #999;'
+    : rank === 3
+    ? 'background:#CD7F32;color:#fff;width:26px;height:26px;font-size:12px;border:2px solid #a05c20;'
+    : 'background:#e0e0e0;color:#666;width:24px;height:24px;font-size:11px;border:1px solid #ccc;';
+  const badge = `<span style="${medalStyle}border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:inherit">${rank}</span>`;
+
+  let scoreCols;
   if (isSteel) {
-    const runs = getRunData(e.shooter.id, e.pi);
+    const runData = getRunData(e.shooter.id, e.pi);
+    const penaltyTime = S.steel.penalty || 5;
+    const runCols = Array.from({length: runs}, (_,r) => {
+      const rd = runData.find(d => d.r === r && d.stg === 0);
+      if (!rd || rd.adj === null) return '<td style="color:var(--muted);text-align:center">—</td>';
+      const penHtml = rd.penSec > 0
+        ? `<span style="background:#e55;color:white;border-radius:10px;padding:1px 5px;font-size:10px;margin-left:4px;font-family:'Roboto Mono',monospace">+${rd.penSec.toFixed(0)}s</span>`
+        : '';
+      return `<td style="text-align:center;font-family:'Roboto Mono',monospace;white-space:nowrap">${rd.adj.toFixed(2)}s${penHtml}</td>`;
+    }).join('');
     const method = S.steel.method;
-    const methodLabel = {'single':'Time','first':'Time','best2':'Best of 2','best3':'Best of 3','avg2':'Avg of 2','avg3':'Avg of 3'}[method]||'Time';
-    const runTimes = runs.filter(r => r.adj !== null);
-    const isSingleRun = runTimes.length <= 1;
-    let runsHtml = '';
-    if (!isSingleRun) {
-      runsHtml = '<div style="font-size:11px;color:var(--muted);margin-bottom:2px">' +
-        runTimes.map((r,ri) => {
-          const penLabel = r.penSec > 0 ? `<span style="color:var(--accent);font-size:10px"> +${r.penSec.toFixed(0)}s</span>` : '';
-          return `Run ${ri+1}: ${r.adj.toFixed(2)}s${penLabel}`;
-        }).join(' &nbsp;|&nbsp; ') + '</div>';
-    }
-    scoreStr = runsHtml + `<strong>${methodLabel}: ${e.score.toFixed(2)}s</strong>`;
+    const methodLabel = {'single':'','first':'','best2':'Best','best3':'Best','avg2':'Avg','avg3':'Avg'}[method]||'';
+    const finalLabel = methodLabel ? `<span style="font-size:10px;color:var(--muted);display:block">${methodLabel}</span>` : '';
+    scoreCols = runCols + `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center;white-space:nowrap">${finalLabel}${e.score.toFixed(2)}s</td>`;
   } else {
-    scoreStr = `<strong>${e.score.total.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--muted)">${e.score.display}</span>`;
+    const dispHtml = `<span style="font-size:11px;color:var(--muted);display:block">${e.score.display}</span>`;
+    scoreCols = `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center"><span style="font-size:16px">${e.score.total.toFixed(2)}</span>${dispHtml}</td>`;
   }
+
+  const catPill = isSteel ? '' : `<td><span class="pill ${e.catInfo.cls}">${e.catInfo.label}</span></td>`;
+
   return `<tr>
-    <td><span class="rank-num ${rkCls}">${rank}</span></td>
-    <td><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong></td>
-    <td style="font-size:12px;color:var(--muted)">${e.pistol.make || '-'}</td>
-    <td><span class="pill ${e.catInfo.cls}">${e.catInfo.label}</span></td>
-    <td>${scoreStr}</td>
+    <td style="text-align:center;padding:10px 8px">${badge}</td>
+    <td><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong><br>
+      <span style="font-size:12px;color:var(--muted)">${e.pistol.make||''} · <span class="pill ${e.catInfo.cls}" style="font-size:10px">${e.catInfo.label}</span></span>
+    </td>
+    <td style="font-size:13px;color:var(--muted)">${e.pistol.make || '—'}</td>
+    ${catPill}
+    ${scoreCols}
   </tr>`;
 }
 
