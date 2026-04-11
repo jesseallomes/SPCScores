@@ -1358,7 +1358,7 @@ function nav(page) {
   document.querySelectorAll('.nav-tab').forEach(t => {
     if (t.getAttribute('onclick') && t.getAttribute('onclick').includes(`'${page}'`)) t.classList.add('active');
   });
-  if (page === 'scores') renderScoreCards();
+  if (page === 'scores') { initScoreMode(); renderScoreCards(); }
   if (page === 'results') renderResults();
   if (page === 'shooters') loadMembers();
   if (page === 'admin') {
@@ -1806,7 +1806,6 @@ function recalcAttendanceFromPistols() {
 
 function renderScoreCards() {
   recalcAttendanceFromPistols();
-  initScoreMode();
   const infoBar = document.getElementById('scores-header-bar');
   const list = document.getElementById('score-cards-list');
 
@@ -2256,20 +2255,23 @@ function confirmAddPistol() {
 
 function initScoreMode() {
   const mode = localStorage.getItem('spc_score_mode');
+  const hasSteel = S.steel.on;
+  const hasPaper = S.paper.on;
+
   if (mode) {
+    // Already chosen - apply silently, hide selector, show search
+    window._scoreMode = mode;
+    document.getElementById('score-mode-selector').style.display = 'none';
+    document.getElementById('score-search-wrap').style.display = 'block';
     applyScoreMode(mode);
+  } else if (hasSteel && hasPaper) {
+    // Both comps - show selector
+    document.getElementById('score-mode-selector').style.display = 'block';
+    document.getElementById('score-search-wrap').style.display = 'none';
   } else {
-    // Show selector if we have shooters, otherwise hide
-    const hasSteel = S.steel.on;
-    const hasPaper = S.paper.on;
-    if (hasSteel && hasPaper) {
-      document.getElementById('score-mode-selector').style.display = 'block';
-      document.getElementById('score-search-wrap').style.display = 'none';
-    } else {
-      // Only one comp type - auto-select
-      const mode = hasSteel ? 'steel' : 'paper';
-      setScoreMode(mode);
-    }
+    // Only one comp type - auto-select without prompt
+    const auto = hasSteel ? 'steel' : 'paper';
+    setScoreMode(auto);
   }
 }
 
