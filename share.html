@@ -768,7 +768,8 @@ async function init() {
     document.getElementById('sync-badge').textContent = 'READ ONLY';
     renderAll();
   } catch(e) {
-    document.getElementById('tab-rankings').innerHTML = '<div class="no-comp"><div class="icon">⚠</div><h2>Error: '+e.message+'</h2></div>';
+    document.getElementById('tab-rankings').innerHTML = '<div class="no-comp"><div class="icon">⚠</div><h2>Error loading results</h2><p style="color:#888;font-size:13px">'+e.message+'</p></div>';
+    document.getElementById('hdr-sub').textContent = 'Error: ' + e.message;
   }
 }
 init();

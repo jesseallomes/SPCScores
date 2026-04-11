@@ -744,8 +744,20 @@ const db = firebase.database();
 let currentKey = null, currentListener = null;
 
 db.ref('currentSession').on('value', snap => {
-  const key = snap.val();
-  if (!key) { showNoComp('No active competition in progress'); return; }
+  let key = snap.val();
+  if (!key) {
+    // currentSession not set - fall back to most recent session
+    db.ref('sessions').limitToLast(1).once('value', function(s) {
+      s.forEach(function(child) { key = child.key; });
+      if (key) activateSession(key);
+      else showNoComp('No active competition in progress');
+    });
+    return;
+  }
+  activateSession(key);
+});
+
+function activateSession(key) {
   if (key === currentKey) return;
   if (currentKey && currentListener) db.ref('sessions/'+currentKey).off('value', currentListener);
   currentKey = key;
@@ -770,7 +782,7 @@ db.ref('currentSession').on('value', snap => {
     document.getElementById('sync-badge').textContent = 'SYNCED';
     renderAll();
   });
-});
+}
 </script>
 </body>
 </html>
