@@ -914,20 +914,7 @@ table.rtable tr:hover td { background: #fafaf8; }
 <div id="page-scores" class="page">
   <div id="scores-header-bar" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
 
-  <!-- Scoring mode selector -->
-  <div id="score-mode-selector" style="display:none;margin-bottom:12px">
-    <div style="background:var(--panel);border-radius:8px;padding:16px;text-align:center">
-      <div style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;color:white;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">What are you scoring tonight?</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:14px">This device will only show the selected competition.</div>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <button class="btn" style="background:var(--accent2);color:white;min-width:100px" onclick="setScoreMode('steel')">⏱ Steel Only</button>
-        <button class="btn" style="background:var(--green);color:white;min-width:100px" onclick="setScoreMode('paper')">🎯 Paper Only</button>
-        <button class="btn" style="background:var(--gold);color:#000;min-width:100px" onclick="setScoreMode('both')">📋 Both</button>
-      </div>
-    </div>
-  </div>
-
-  <div style="position:relative;margin-bottom:10px" id="score-search-wrap" style="display:none">
+  <div style="position:relative;margin-bottom:10px" id="score-search-wrap">
     <input type="text" id="score-search" placeholder="Filter shooters..."
       style="margin-bottom:0;padding-left:32px"
       oninput="filterScoreCards(this.value)">
@@ -1809,6 +1796,25 @@ function renderScoreCards() {
   const infoBar = document.getElementById('scores-header-bar');
   const list = document.getElementById('score-cards-list');
 
+  // Build [T] / [P] toggle buttons in header bar
+  if (infoBar) {
+    const mode = window._scoreMode || 'both';
+    let toggleHtml = '';
+    if (S.steel.on) {
+      const active = mode === 'steel' || mode === 'both';
+      toggleHtml += `<button onclick="toggleCompMode('steel')"
+        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:4px 12px;border-radius:5px;cursor:pointer;border:2px solid var(--accent2);
+        background:${active?'var(--accent2)':'transparent'};color:${active?'white':'var(--accent2)'};">[T] ${S.steel.name||'Steel'}</button>`;
+    }
+    if (S.paper.on) {
+      const active = mode === 'paper' || mode === 'both';
+      toggleHtml += `<button onclick="toggleCompMode('paper')"
+        style="font-family:'Roboto Mono',monospace;font-size:13px;font-weight:700;padding:4px 12px;border-radius:5px;cursor:pointer;border:2px solid var(--green);
+        background:${active?'var(--green)':'transparent'};color:${active?'white':'var(--green)'};">[P] ${S.paper.name||'Paper'}</button>`;
+    }
+    infoBar.innerHTML = toggleHtml;
+  }
+
   // Info chips
   let chips = '';
   if (S.steel.on) chips += `<div style="background:var(--panel2);color:white;padding:6px 12px;border-radius:4px;font-size:12px;font-family:'Roboto Mono',monospace">[T] ${S.steel.name} - ${methodLabel(S.steel.method)}</div>`;
@@ -2254,58 +2260,34 @@ function confirmAddPistol() {
 }
 
 function initScoreMode() {
-  const mode = localStorage.getItem('spc_score_mode');
-  const hasSteel = S.steel.on;
-  const hasPaper = S.paper.on;
-
-  if (mode) {
-    // Already chosen - apply silently, hide selector, show search
-    window._scoreMode = mode;
-    document.getElementById('score-mode-selector').style.display = 'none';
-    document.getElementById('score-search-wrap').style.display = 'block';
-    applyScoreMode(mode);
-  } else if (hasSteel && hasPaper) {
-    // Both comps - show selector
-    document.getElementById('score-mode-selector').style.display = 'block';
-    document.getElementById('score-search-wrap').style.display = 'none';
-  } else {
-    // Only one comp type - auto-select without prompt
-    const auto = hasSteel ? 'steel' : 'paper';
-    setScoreMode(auto);
-  }
+  const saved = localStorage.getItem('spc_score_mode');
+  window._scoreMode = saved || 'both';
 }
 
 function setScoreMode(mode) {
   localStorage.setItem('spc_score_mode', mode);
-  document.getElementById('score-mode-selector').style.display = 'none';
-  document.getElementById('score-search-wrap').style.display = 'block';
-  applyScoreMode(mode);
+  window._scoreMode = mode;
   renderScoreCards();
+}
+
+function toggleCompMode(comp) {
+  const current = window._scoreMode || 'both';
+  let next;
+  if (current === 'both') {
+    // Hide the other one
+    next = comp;
+  } else if (current === comp) {
+    // Already showing only this one - switch to both
+    next = 'both';
+  } else {
+    // Showing the other one - switch to this one
+    next = comp;
+  }
+  setScoreMode(next);
 }
 
 function applyScoreMode(mode) {
   window._scoreMode = mode;
-  // Show a small mode badge with reset option
-  const bar = document.getElementById('scores-header-bar');
-  if (bar) {
-    const modeLabel = mode === 'steel' ? '⏱ Steel Only' : mode === 'paper' ? '🎯 Paper Only' : '📋 Both';
-    const existing = document.getElementById('score-mode-badge');
-    if (existing) existing.remove();
-    const badge = document.createElement('div');
-    badge.id = 'score-mode-badge';
-    badge.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)';
-    badge.innerHTML = `<span style="background:var(--panel);color:white;padding:3px 10px;border-radius:12px;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:11px">${modeLabel}</span>
-      <button onclick="resetScoreMode()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;text-decoration:underline">change</button>`;
-    bar.appendChild(badge);
-  }
-}
-
-function resetScoreMode() {
-  localStorage.removeItem('spc_score_mode');
-  window._scoreMode = null;
-  document.getElementById('score-mode-selector').style.display = 'block';
-  document.getElementById('score-search-wrap').style.display = 'none';
-  document.getElementById('score-mode-badge')?.remove();
 }
 
 function filterScoreCards(query) {
