@@ -144,6 +144,9 @@ body { padding-bottom: 60px; }
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
+const PILL_PALETTE = ['p22s','p22m','p357s','p357m','p9mms','p9mmm','pother'];
+const _pillCache = {};
+
 const ORDINALS = ['', '', '2nd', '3rd', '4th', '5th'];
 
 function formatDate(d) {

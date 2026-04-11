@@ -1983,9 +1983,9 @@ function pistolScoreEntry(s, p, pi) {
       const val = (scores.paper && scores.paper[`z${z}`]) || '';
       return `<div class="zone-col">
         <div class="zone-lbl ${z==='X'?'x':''}">${z}</div>
-        <input type="number" min="0" placeholder="0" value="${val}"
-          inputmode="numeric" pattern="[0-9]*"
-          enterkeyhint="next"
+        <input type="text" inputmode="numeric" pattern="[0-9]*"
+          placeholder="0" value="${val}"
+          enterkeyhint="next" autocomplete="off"
           oninput="saveScore('${s.id}',${pi},'paper','z${z}',this.value)">
       </div>`;
     }).join('');
@@ -3082,7 +3082,7 @@ function exportReadOnlyExcel() {
   const wb = XLSX.utils.book_new();
   if (S.steel.on) buildScoreSheet(wb, 'steel');
   if (S.paper.on) buildScoreSheet(wb, 'paper');
-  XLSX.writeFile(wb, `${S.date||'results'}-${(S.title||'scores').replace(/\s+/g,'-')}.xlsx`);
+  XLSX.writeFile(wb, `${S.date||'results'}-${(S.title||'scores').replace(/\s+/g,'-')}.xlsx`, {cellStyles:true});
   toast('Downloaded!', 'success');
 }
 
@@ -3700,8 +3700,8 @@ function exportExcel() {
   if (S.paper.on) buildScoreSheet(wb, 'paper');
   buildAttendSheet(wb);
   const filename = (S.date||'results') + '-' + (S.title||'scores').replace(/\s+/g,'-') + '.xlsx';
-  XLSX.writeFile(wb, filename);
-  toast('Excel downloaded! Steel and paper on separate tabs.', 'success');
+  XLSX.writeFile(wb, filename, {cellStyles:true});
+  toast('Excel downloaded!', 'success');
 }
 
 function buildScoreSheet(wb, type) {
@@ -3923,7 +3923,12 @@ function listenSession() {
       syncFormFromState();
     }
     const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
-    if (activePage === 'scores') renderScoreCards();
+    if (activePage === 'scores') {
+      // Don't re-render if user is actively typing in an input
+      const focused = document.activeElement;
+      const isTyping = focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA');
+      if (!isTyping) renderScoreCards();
+    }
     if (activePage === 'results') renderResults();
     if (activePage === 'attend') renderAttendance();
     // Always update results quietly in background for live sync indicator
