@@ -866,6 +866,7 @@ table.rtable tr:hover td { background: #fafaf8; }
   </div>
 
   <button class="btn btn-red btn-block" onclick="saveSetupAndGo()">SAVE SETUP & GO TO SHOOTERS →</button>
+  <button class="btn btn-outline btn-block" style="margin-top:8px" onclick="showLiveLink()">📱 Live Scores — QR Code & Link</button>
 </div>
 
 <!-- ===== SHOOTERS PAGE ===== -->
@@ -1308,7 +1309,10 @@ try {
     if (isFirebaseReady) {
       badge.textContent = 'LIVE SYNC ON';
       badge.className = 'sync-badge ok';
-      if (sessionKey) listenSession();
+      if (sessionKey) {
+        listenSession();
+        db.ref('currentSession').set(sessionKey);
+      }
     } else {
       badge.textContent = 'OFFLINE';
       badge.className = 'sync-badge err';
@@ -3082,8 +3086,12 @@ function exportReadOnlyExcel() {
   toast('Downloaded!', 'success');
 }
 
+function copyLiveUrl() {
+  navigator.clipboard.writeText(window._liveUrl||'').then(function(){ toast('Copied!','success'); });
+}
 function showLiveLink() {
   const liveUrl = window.location.href.replace('index.html','').replace(/\?.*$/,'') + 'live.html';
+  window._liveUrl = liveUrl;
   const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(liveUrl);
 
   const popup = document.createElement('div');
@@ -3098,7 +3106,7 @@ function showLiveLink() {
         <img src="${qrUrl}" style="width:220px;height:220px;border-radius:6px;margin-bottom:14px" alt="QR Code">
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <input type="text" value="${liveUrl}" readonly style="flex:1;font-size:11px;margin-bottom:0;background:var(--bg)">
-          <button class="btn btn-blue btn-sm" onclick="navigator.clipboard.writeText('${liveUrl}').then(()=>toast('Copied!','success'))">Copy</button>
+          <button class="btn btn-blue btn-sm" onclick="copyLiveUrl()">Copy</button>
         </div>
         <button class="btn btn-outline btn-block" onclick="this.closest('div').parentElement.parentElement.remove()">Close</button>
       </div>
