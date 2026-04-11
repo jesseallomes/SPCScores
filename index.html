@@ -3439,9 +3439,9 @@ function buildResultSection(type, entries) {
 
   // Build column headers
   const runHeaders = isSteel
-    ? Array.from({length: runs}, (_,r) => `<th>RUN ${r+1}</th>`).join('') + `<th>${methodLabel.toUpperCase()}</th>`
-    : `<th>SCORE</th>`;
-  const tableHeader = `<thead><tr><th>#</th><th>NAME</th><th>PISTOL</th>${isSteel?'':' <th>CAT</th>'}${runHeaders}</tr></thead>`;
+    ? Array.from({length: runs}, (_,r) => `<th style="text-align:center">RUN ${r+1}</th>`).join('') + `<th style="text-align:center">${methodLabel.toUpperCase()}</th>`
+    : `<th style="text-align:center">SCORE</th>`;
+  const tableHeader = `<thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th>${runHeaders}</tr></thead>`;
 
   // Overall top entries (all, sorted by score)
   const overallRows = entries.map((e, i) => resultRow(e, i, isSteel, runs)).join('');
@@ -3503,46 +3503,42 @@ function getRunData(sid, pi) {
 
 function resultRow(e, i, isSteel, runs) {
   const rank = i + 1;
-  // Medal badges - gold biggest, then silver, then bronze
   const medalStyle = rank === 1
-    ? 'background:#FFD700;color:#5a3d00;width:32px;height:32px;font-size:15px;border:2px solid #c8a400;'
+    ? 'background:#FFD700;color:#5a3d00;width:30px;height:30px;font-size:14px;border:2px solid #c8a400;'
     : rank === 2
-    ? 'background:#C0C0C0;color:#333;width:28px;height:28px;font-size:13px;border:2px solid #999;'
+    ? 'background:#C0C0C0;color:#333;width:26px;height:26px;font-size:12px;border:2px solid #999;'
     : rank === 3
-    ? 'background:#CD7F32;color:#fff;width:26px;height:26px;font-size:12px;border:2px solid #a05c20;'
-    : 'background:#e0e0e0;color:#666;width:24px;height:24px;font-size:11px;border:1px solid #ccc;';
-  const badge = `<span style="${medalStyle}border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:inherit">${rank}</span>`;
+    ? 'background:#CD7F32;color:#fff;width:23px;height:23px;font-size:11px;border:2px solid #a05c20;'
+    : 'background:#e0e0e0;color:#666;width:21px;height:21px;font-size:10px;border:1px solid #ccc;';
+  const badge = `<span style="${medalStyle}border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Roboto Condensed',sans-serif;font-weight:700">${rank}</span>`;
+
+  const calStr = e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre;
+  const catPill = `<span class="pill ${e.catInfo.cls}" style="font-size:10px;padding:1px 5px">${e.catInfo.label}</span>`;
 
   let scoreCols;
   if (isSteel) {
     const runData = getRunData(e.shooter.id, e.pi);
-    const penaltyTime = S.steel.penalty || 5;
-    const runCols = Array.from({length: runs}, (_,r) => {
-      const rd = runData.find(d => d.r === r && d.stg === 0);
-      if (!rd || rd.adj === null) return '<td style="color:var(--muted);text-align:center">—</td>';
-      const penHtml = rd.penSec > 0
-        ? `<span style="background:#e55;color:white;border-radius:10px;padding:1px 5px;font-size:10px;margin-left:4px;font-family:'Roboto Mono',monospace">+${rd.penSec.toFixed(0)}s</span>`
-        : '';
-      return `<td style="text-align:center;font-family:'Roboto Mono',monospace;white-space:nowrap">${rd.adj.toFixed(2)}s${penHtml}</td>`;
-    }).join('');
     const method = S.steel.method;
     const methodLabel = {'single':'','first':'','best2':'Best','best3':'Best','avg2':'Avg','avg3':'Avg'}[method]||'';
-    const finalLabel = methodLabel ? `<span style="font-size:10px;color:var(--muted);display:block">${methodLabel}</span>` : '';
-    scoreCols = runCols + `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center;white-space:nowrap">${finalLabel}${e.score.toFixed(2)}s</td>`;
+    const runCols = Array.from({length: runs}, (_,r) => {
+      const rd = runData.find(d => d.r === r && d.stg === 0);
+      if (!rd || rd.adj === null) return `<td style="text-align:center;color:var(--muted);font-size:12px">—</td>`;
+      const penHtml = rd.penSec > 0
+        ? `<span style="position:absolute;top:2px;right:2px;background:#e55;color:white;border-radius:8px;padding:0px 3px;font-size:8px;font-family:'Roboto Condensed',sans-serif;font-weight:700;line-height:14px">+${rd.penSec.toFixed(0)}s</span>`
+        : '';
+      return `<td style="position:relative;text-align:center;font-family:'Roboto Mono',monospace;font-size:12px;white-space:nowrap;padding:8px 6px">${rd.adj.toFixed(2)}${penHtml}</td>`;
+    }).join('');
+    const finalLabel = methodLabel ? `<div style="font-size:9px;color:var(--muted)">${methodLabel}</div>` : '';
+    scoreCols = runCols + `<td style="font-weight:700;font-family:'Roboto Mono',monospace;font-size:13px;text-align:center;white-space:nowrap">${finalLabel}${e.score.toFixed(2)}s</td>`;
   } else {
-    const dispHtml = `<span style="font-size:11px;color:var(--muted);display:block">${e.score.display}</span>`;
-    scoreCols = `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center"><span style="font-size:16px">${e.score.total.toFixed(2)}</span>${dispHtml}</td>`;
+    scoreCols = `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center"><span style="font-size:14px">${e.score.total.toFixed(2)}</span><div style="font-size:10px;color:var(--muted)">${e.score.display}</div></td>`;
   }
 
-  const catPill = isSteel ? '' : `<td><span class="pill ${e.catInfo.cls}">${e.catInfo.label}</span></td>`;
-
   return `<tr>
-    <td style="text-align:center;padding:10px 8px">${badge}</td>
-    <td><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong><br>
-      <span style="font-size:12px;color:var(--muted)">${e.pistol.make||''} · <span class="pill ${e.catInfo.cls}" style="font-size:10px">${e.catInfo.label}</span></span>
-    </td>
-    <td style="font-size:13px;color:var(--muted)">${e.pistol.make || '—'}</td>
-    ${catPill}
+    <td style="text-align:center;padding:8px 6px">${badge}</td>
+    <td style="font-size:13px;padding:8px 6px"><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong></td>
+    <td style="font-size:12px;color:var(--muted);padding:8px 6px">${e.pistol.make||'—'}</td>
+    <td style="padding:8px 6px">${catPill}</td>
     ${scoreCols}
   </tr>`;
 }
