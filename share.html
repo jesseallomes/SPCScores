@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPC Results</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Roboto', Arial, sans-serif; background: #f0f0ee; color: #1a1a1a; padding: 0 0 40px; }
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&family=Roboto:wght@300;400;500&family=Roboto+Mono:wght@400;600&display=swap');
+
+header { background: #1c2b3a; color: white; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+header h1 { font-family: 'Roboto Condensed', sans-serif; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+header .sub { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+.badge { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 4px 10px; font-size: 11px; font-family: monospace; color: white; }
+#content { max-width: 860px; margin: 0 auto; padding: 12px; }
+.loading { text-align: center; padding: 60px 20px; color: #888; font-family: 'Roboto Condensed', sans-serif; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+.export-bar { display: flex; gap: 10px; justify-content: center; padding: 20px; flex-wrap: wrap; }
+.btn { padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase; }
+.btn-dark { background: #1c2b3a; color: white; }
+.btn-green { background: #2a7a45; color: white; }
+
+/* Results styles - minimal */
+.results-section-title { background: #1c2b3a; color: white; padding: 12px 16px; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 16px; letter-spacing: 1px; text-transform: uppercase; border-radius: 8px 8px 0 0; }
+.results-table-wrap { background: white; border-radius: 0 0 8px 8px; overflow-x: auto; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.rtable { width: 100%; border-collapse: collapse; }
+.rtable th { background: #243447; color: white; padding: 10px 14px; font-family: 'Roboto Condensed', sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; text-align: left; }
+.rtable td { padding: 12px 14px; border-bottom: 1px solid #eee; font-size: 14px; color: #1a1a1a; }
+.rtable tr:last-child td { border-bottom: none; }
+.cat-row td { background: #e8eef4; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #334; padding: 10px 14px; }
+.section-divider-row td { background: #1c2b3a; color: white; padding: 8px 14px; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.rank-badge { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: 'Roboto Condensed', sans-serif; }
+.rk1 { background: #f0c040; color: #5a3d00; }
+.rk2 { background: #c0c0c0; color: #333; }
+.rk3 { background: #cd8c52; color: #fff; }
+.rk-other { background: #e0e0e0; color: #555; }
+.pill { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; font-family: 'Roboto Mono', monospace; font-weight: 600; }
+.p22s,.p22m,.p22r { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.p9mms,.p9mmm { background: #f3e5f5; color: #6a1b9a; border: 1px solid #ce93d8; }
+.p357s,.p357m,.p38s,.p38m { background: #fff3e0; color: #e65100; border: 1px solid #ffcc02; }
+.p44s,.p44m,.p45s,.p45m { background: #fce4ec; color: #880e4f; border: 1px solid #f48fb1; }
+.p32s,.p32m,.p25s,.p380s { background: #e8eaf6; color: #1a237e; border: 1px solid #9fa8da; }
+.pairs,.pairm { background: #f1f8e9; color: #33691e; border: 1px solid #aed581; }
+.pother { background: #eee; color: #555; border: 1px solid #ccc; }
+.empty-state { text-align: center; padding: 40px; color: #888; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Sunraysia Pistol Club — Scoring Portal</h1>
+    <div class="sub" id="hdr-sub">Results</div>
+  </div>
+  <div class="badge" id="hdr-badge">● Loading</div>
+</header>
+
+<div id="content">
+  <div class="loading">🎯 Loading Results...</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+let S = { steel:{on:false,method:'single',stages:1,penalty:5}, paper:{on:false,shots:12}, shooters:[], scores:{} };
+
+const ORDINALS = ['', '', '2nd', '3rd', '4th', '5th'];
+
+function formatDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+function calibreOrder(cal) {
+  const c = cal.toLowerCase().replace(/\s/g,'');
+  // known map
+  const map = {
+    'air':0.0,'airpistol':0.0,
+    '.177':0.177,
+    '.22':0.220,'22':0.220,'.22wmr':0.221,'22wmr':0.221,
+    '.25':0.250,'6.35mm':0.250,
+    '.32':0.320,'7.65mm':0.320,
+    '9mm':0.354,'9':0.354,
+    '.356':0.356,'.357':0.357,
+    '.38':0.380,'.380':0.380,'9mmshort':0.380,
+    '.40':0.400,'10mm':0.400,
+    '.41':0.410,'.44':0.440,'.45':0.450,'.50':0.500
+  };
+  if (map[c] !== undefined) return map[c];
+  // try to parse numeric e.g. ".44 mag" -> 0.44
+  const m = c.match(/(\d+\.?\d*)/);
+  if (m) {
+    let n = parseFloat(m[1]);
+    if (n > 10) n = n / 1000; // e.g. 357 -> 0.357
+    return n;
+  }
+  return 999;
+}
+
+function getCatInfo(calibre, cls, type, suffix) {
+  // Revolvers: append R to calibre display e.g. ".22R S"
+  const calDisplay = type === 'R' ? `${calibre}R` : calibre;
+  const suffixStr = suffix ? ` (${suffix})` : '';
+  return { label: `${calDisplay} ${cls}${suffixStr}`, cls: pillCls(calibre) };
+}
+
+function pillCls(calibre) {
+  const known = {'.22':'p22s','.22r':'p357s','9mm':'p9mms','.38':'p22m',
+                 '.357':'p357m','.40':'p9mmm','.45':'pother','air':'p22m'};
+  const k = calibre.toLowerCase().replace(/\s/g,'');
+  if (known[k]) return known[k];
+  if (!_pillCache[k]) {
+    const keys = Object.keys(_pillCache);
+    _pillCache[k] = PILL_PALETTE[keys.length % PILL_PALETTE.length];
+  }
+  return _pillCache[k];
+}
+
+function runCount() {
+  const m = S.steel.method;
+  if (m === 'best2' || m === 'avg2') return 2;
+  if (m === 'best3' || m === 'avg3') return 3;
+  return 1;
+}
+
+function calcSteel(sid, pi) {
+  const sc = S.scores[sid]?.[pi]?.steel || {};
+  const runs = runCount();
+  const stages = S.steel.stages;
+  const method = S.steel.method;
+  let total = 0;
+  for (let stg = 0; stg < stages; stg++) {
+    const times = [];
+    for (let r = 0; r < runs; r++) {
+      const v = parseFloat(sc[`s${stg}_r${r}`]);
+      if (!isNaN(v) && v > 0) times.push(v);
+    }
+    if (!times.length) return null;
+    if (method === 'single' || method === 'first') total += times[0];
+    else if (method === 'best2' || method === 'best3') total += Math.min(...times);
+    else if (method === 'avg2' || method === 'avg3') total += times.reduce((a,b)=>a+b,0)/times.length;
+  }
+  // Per-run penalties: each run's time already adjusted, so recalc with them
+  // We need to find the winning run(s) and add their penalties
+  // Recalculate including per-run penalties
+  const penaltyTime = S.steel.penalty || 5;
+  let totalWithPen = 0;
+  for (let stg = 0; stg < stages; stg++) {
+    const runData = Array.from({length:runs}, (_, r) => {
+      const t = parseFloat(sc[`s${stg}_r${r}`]);
+      const miss = parseInt(sc[`s${stg}_r${r}_miss`]) || 0;
+      const oos  = parseInt(sc[`s${stg}_r${r}_oos`])  || 0;
+      const adj = (!isNaN(t) && t > 0) ? t + (miss + oos) * penaltyTime : null;
+      return adj;
+    }).filter(v => v !== null);
+    if (!runData.length) return null;
+    if (method === 'single' || method === 'first') totalWithPen += runData[0];
+    else if (method === 'best2' || method === 'best3') totalWithPen += Math.min(...runData);
+    else if (method === 'avg2' || method === 'avg3') totalWithPen += runData.reduce((a,b)=>a+b,0)/runData.length;
+  }
+  return totalWithPen;
+}
+
+function calcPaper(sid, pi) {
+  const sc = S.scores[sid]?.[pi]?.paper || {};
+  const zones = ['X','10','9','8','7','6'];
+  let any = false;
+  const vals = {};
+  zones.forEach(z => { vals[z] = parseInt(sc[`z${z}`]) || 0; if (vals[z]) any = true; });
+  if (!any) return null;
+
+  // X = 0.01 pts each ONLY (not 10 + 0.01)
+  const total =
+    vals['X']  * 0.01 +
+    vals['10'] * 10 +
+    vals['9']  * 9 +
+    vals['8']  * 8 +
+    vals['7']  * 7 +
+    vals['6']  * 6;
+
+  const parts = [];
+  if (vals['X']) parts.push(`${vals['X']}xX`);
+  ['10','9','8','7','6'].forEach(z => { if (vals[z]) parts.push(`${vals[z]}x${z}`); });
+
+  return { total, display: parts.join(' ') || '-', xCount: vals['X'], vals };
+}
+
+function getAllEntries(type) {
+  const entries = [];
+
+  // Step 1: for each shooter, work out which ordinal each pistol entry is
+  // within that shooter's own calibre+class combo (per-shooter count)
+  const shooterPistolOrdinals = {}; // shooterId -> [ordinal per pistol index]
+  S.shooters.forEach(s => {
+    const perShooterCount = {};
+    shooterPistolOrdinals[s.id] = (s.pistols || []).map((p) => {
+      const typeStr = p.type === 'R' ? 'R' : '';
+      const baseCat = `${p.calibre}_${typeStr}_${p.cls}`;
+      perShooterCount[baseCat] = (perShooterCount[baseCat] || 0) + 1;
+      return perShooterCount[baseCat]; // 1 = first, 2 = second, etc
+    });
+  });
+
+  // Step 2: build entries with the correct catKey using that shooter's ordinal
+  S.shooters.forEach(s => {
+    (s.pistols || []).forEach((p, pi) => {
+      const score = type === 'steel' ? calcSteel(s.id, pi) : calcPaper(s.id, pi);
+      if (score !== null) {
+        const typeStr = p.type === 'R' ? 'R' : '';
+        const baseCat = `${p.calibre}_${typeStr}_${p.cls}`;
+        const ordinal = (shooterPistolOrdinals[s.id] || [])[pi] || 1;
+        const suffix = ordinal > 1 ? (ORDINALS[ordinal] || `${ordinal}th`) : '';
+        // catKey groups ALL shooters' nth entries of this calibre/class together
+        const catKey = suffix ? `${baseCat}_${suffix}` : baseCat;
+        entries.push({ shooter: s, pistol: p, pi, score, catKey, ordinal,
+          catInfo: getCatInfo(p.calibre, p.cls, p.type, suffix) });
+      }
+    });
+  });
+
+  if (type === 'steel') entries.sort((a,b) => a.score - b.score);
+  else entries.sort((a,b) => b.score.total - a.score.total);
+  return entries;
+}
+
+function sortedByCategory(entries) {
+  return [...entries].sort((a, b) => {
+    // Ordinal group first — 1st before 2nd before 3rd etc
+    if (a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
+    // Within same ordinal: calibre order
+    const co = calibreOrder(a.pistol.calibre) - calibreOrder(b.pistol.calibre);
+    if (co !== 0) return co;
+    // Pistol before Revolver
+    const aR = a.pistol.type === 'R' ? 1 : 0;
+    const bR = b.pistol.type === 'R' ? 1 : 0;
+    if (aR !== bR) return aR - bR;
+    // S before M
+    if (a.pistol.cls === 'S' && b.pistol.cls === 'M') return -1;
+    if (a.pistol.cls === 'M' && b.pistol.cls === 'S') return 1;
+    return 0;
+  });
+}
+
+function resultRow(e, i, isSteel) {
+  const rank = i + 1;
+  const rkCls = rank===1?'rk1':rank===2?'rk2':rank===3?'rk3':'rk-other';
+  const scoreStr = isSteel
+    ? `<strong>${e.score.toFixed(2)}s</strong>`
+    : `<strong>${e.score.total.toFixed(2)}</strong><br><span style="font-size:11px;color:var(--muted)">${e.score.display}</span>`;
+  return `<tr>
+    <td><span class="rank-num ${rkCls}">${rank}</span></td>
+    <td><strong>${e.shooter.firstName} ${e.shooter.lastName}</strong></td>
+    <td style="font-size:12px;color:var(--muted)">${e.pistol.make || '-'}</td>
+    <td><span class="pill ${e.catInfo.cls}">${e.catInfo.label}</span></td>
+    <td>${scoreStr}</td>
+  </tr>`;
+}
+
+function buildResultSection(type, entries) {
+  const isSteel = type === 'steel';
+  const name = isSteel ? S.steel.name : S.paper.name;
+  const icon = isSteel ? '[T]' : '[P]';
+
+  if (!entries.length) return `
+    <div class="results-section-title">${icon} ${name.toUpperCase()}</div>
+    <div class="results-table-wrap"><div class="empty-state">No scores entered</div></div>`;
+
+  const overallRows = entries.slice(0, 3).map((e, i) => resultRow(e, i, isSteel)).join('');
+
+  // Group by category - sorted by calibre order then S before M
+  const catSorted = sortedByCategory(entries);
+  const groups = new Map();
+  catSorted.forEach(e => {
+    if (!groups.has(e.catKey)) groups.set(e.catKey, []);
+    groups.get(e.catKey).push(e);
+  });
+
+  let catRows = '';
+  groups.forEach((items, key) => {
+    // sort within category by score
+    const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
+    catRows += `<tr class="cat-row"><td colspan="5">${items[0].catInfo.label}</td></tr>`;
+    sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel); });
+  });
+
+  const scoreHdr = isSteel ? 'TIME' : 'SCORE';
+
+  return `
+    <div class="results-section-title">${icon} ${name.toUpperCase()} - OVERALL</div>
+    <div class="results-table-wrap" style="margin-bottom:8px">
+      <table class="rtable">
+        <thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th><th>${scoreHdr}</th></tr></thead>
+        <tbody>${overallRows}</tbody>
+      </table>
+    </div>
+
+    <div class="results-section-title" style="background:var(--accent2)">${icon} ${name.toUpperCase()} - BY CATEGORY</div>
+    <div class="results-table-wrap" style="margin-bottom:28px">
+      <table class="rtable">
+        <thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th><th>${scoreHdr}</th></tr></thead>
+        <tbody>${catRows}</tbody>
+      </table>
+    </div>`;
+}
+
+firebase.initializeApp({
+  apiKey:"AIzaSyANlUmGg_IkBRTfzYXdOA7UjdBbED56tm8",
+  authDomain:"pistol-club-scores.firebaseapp.com",
+  databaseURL:"https://pistol-club-scores-default-rtdb.firebaseio.com",
+  projectId:"pistol-club-scores",
+  storageBucket:"pistol-club-scores.firebasestorage.app",
+  messagingSenderId:"21456591082",
+  appId:"1:21456591082:web:32f8ccef1eae124b9f1f93"
+});
+const db = firebase.database();
+
+async function init() {
+  const key = new URLSearchParams(window.location.search).get('share');
+  if (!key) { document.getElementById('content').innerHTML = '<div class="empty-state">No share key in URL.</div>'; return; }
+  try {
+    const snap = await db.ref('shares/' + key).once('value');
+    const data = snap.val();
+    if (!data) { document.getElementById('content').innerHTML = '<div class="empty-state">Share link not found or expired.</div>'; return; }
+
+    S.steel = Object.assign({on:false,name:'Steel',method:'single',stages:1,penalty:5}, data.steel||{});
+    S.paper = Object.assign({on:false,name:'Paper',shots:12}, data.paper||{});
+    S.shooters = data.shooters || [];
+    S.scores = data.scores || {};
+
+    document.getElementById('hdr-sub').textContent = (data.title||'') + ' — ' + (formatDate(data.date)||'') + ' · READ ONLY';
+    document.getElementById('hdr-badge').textContent = '● Results';
+
+    let html = '';
+    if (S.steel.on) html += buildResultSection('steel', getAllEntries('steel'));
+    if (S.paper.on) html += buildResultSection('paper', getAllEntries('paper'));
+    if (!html) html = '<div class="empty-state">No scores entered yet.</div>';
+
+    document.getElementById('content').innerHTML = html +
+      '<div class="export-bar">' +
+      '<button class="btn btn-dark" onclick="window.print()">🖨 Print / PDF</button>' +
+      '<button class="btn btn-green" onclick="doExcel()">📊 Export Excel</button>' +
+      '</div>';
+  } catch(e) {
+    document.getElementById('content').innerHTML = '<div class="empty-state">Error: ' + e.message + '</div>';
+  }
+}
+
+function doExcel() {
+  const wb = XLSX.utils.book_new();
+  ['steel','paper'].forEach(t => {
+    if (!S[t].on) return;
+    const isS = t==='steel';
+    const rows = [['Name','Pistol','Calibre','M/S', isS?'Time (s)':'Score']];
+    getAllEntries(t).forEach(e => rows.push([
+      e.shooter.firstName+' '+e.shooter.lastName,
+      e.pistol.make||'',
+      (e.pistol.type==='R'?e.pistol.calibre+'R':e.pistol.calibre),
+      e.pistol.cls,
+      isS?e.score.toFixed(2):e.score.total.toFixed(2)
+    ]));
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, isS?'Steel':'Paper');
+  });
+  XLSX.writeFile(wb, (S.date||'results')+'-scores.xlsx');
+}
+
+init();
+</script>
+</body>
+</html>

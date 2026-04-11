@@ -2705,85 +2705,10 @@ async function checkShareMode() {
   const params = new URLSearchParams(window.location.search);
   const shareKey = params.get('share');
   if (!shareKey) return false;
-
-  // Clear the CSS hide and manually control display
-  const hideStyle = document.getElementById('share-hide-style');
-  if (hideStyle) hideStyle.textContent = '';
-  document.querySelector('header').style.display = 'none';
-  document.querySelector('.nav-tabs').style.display = 'none';
-  document.querySelectorAll('.page').forEach(p => { p.classList.remove('active'); p.style.display = 'none'; });
-
-  document.body.insertAdjacentHTML('afterbegin', `
-    <div id="share-loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Roboto Condensed',sans-serif">
-      <div style="font-size:48px;margin-bottom:16px">🎯</div>
-      <div style="font-size:18px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--panel)">Loading Results...</div>
-    </div>`);
-
-  // Wait for Firebase SDK to init (db set), not full connection
-  let waited = 0;
-  while (!db && waited < 5000) {
-    await new Promise(r => setTimeout(r, 100));
-    waited += 100;
-  }
-
-  document.getElementById('share-loading')?.remove();
-
-  if (!db) {
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif"><h2>Could not connect to Firebase. Check your internet connection.</h2></div>';
-    return true;
-  }
-
-  try {
-    const snap = await db.ref(`shares/${shareKey}`).once('value');
-    const data = snap.val();
-    if (!data) {
-      document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif"><h2>Share link not found or expired.</h2></div>';
-      return true;
-    }
-
-    S.title = data.title || '';
-    S.date = data.date || '';
-    S.steel = Object.assign({ on: false, name: 'Steel', method: 'single', stages: 1, penalty: 5 }, data.steel || {});
-    S.paper = Object.assign({ on: false, name: 'Paper', shots: 12 }, data.paper || {});
-    S.shooters = data.shooters || [];
-    S.scores = data.scores || {};
-    console.log('Share loaded: steel.on=', S.steel.on, 'paper.on=', S.paper.on, 'shooters=', S.shooters.length);
-
-    // Restore header
-    document.querySelector('header').style.display = 'flex';
-    document.querySelector('header').innerHTML = `
-      <div class="header-title">
-        <img src="${document.querySelector('.header-logo')?.src||''}" class="header-logo" alt="SPC">
-        <div>
-          <h1>Sunraysia Pistol Club<br>Scoring Portal</h1>
-          <div class="night-label" style="color:rgba(255,255,255,0.7)">${data.title || ''} — ${formatDate(data.date)} · READ ONLY</div>
-        </div>
-      </div>
-      <div class="sync-badge ok">● Results</div>`;
-
-    const resultsPage = document.getElementById('page-results');
-
-    // Force visible - inject style tag to beat CSS !important
-    const showStyle = document.createElement('style');
-    showStyle.textContent = '#page-results { display: block !important; max-width: 860px; margin: 0 auto; }';
-    document.head.appendChild(showStyle);
-
-    renderResults();
-    resultsPage.querySelector('.no-print')?.remove();
-
-    // Add export bar
-    const exportBar = document.createElement('div');
-    exportBar.style.cssText = 'display:flex;gap:10px;justify-content:center;padding:16px;flex-wrap:wrap';
-    exportBar.innerHTML = `
-      <button class="btn btn-dark" onclick="window.print()">🖨 Print / Save PDF</button>
-      <button class="btn btn-green" onclick="exportReadOnlyExcel()">📊 Export Excel</button>`;
-    resultsPage.appendChild(exportBar);
-    return true;
-  } catch(e) {
-    console.error('Share load error:', e);
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif"><h2>Error loading results.</h2></div>';
-    return false;
-  }
+  // Redirect to dedicated share page
+  const base = window.location.href.split('?')[0].replace('index.html','');
+  window.location.replace(base + 'share.html?share=' + shareKey);
+  return true;
 }
 
 // ====================================================
@@ -3856,7 +3781,8 @@ async function showSessionScores(key) {
     created: Date.now()
   });
 
-  const shareUrl = `${window.location.href.split('?')[0]}?share=${shareKey}`;
+  const base = window.location.href.split('?')[0].replace('index.html','');
+  const shareUrl = base + 'share.html?share=' + shareKey;
   showSharePopup(shareUrl);
 }
 
