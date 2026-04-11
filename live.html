@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1c2b3a">
-<title>SPC Results</title>
+<title>SPC Live Scores</title>
 <style>
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -133,12 +133,12 @@ body { padding-bottom: 60px; }
 <div class="comp-toggles" id="comp-toggles" style="display:none"></div>
 
 <div class="tab-bar">
-  <button class="tab-btn active" id="btn-rankings" onclick="showTab('rankings')">🏆 Rankings</button>
-  <button class="tab-btn" id="btn-scores" onclick="showTab('scores')">📋 Scores</button>
+  <button class="tab-btn active" id="btn-scores" onclick="showTab('scores')">📋 Live Scores</button>
+  <button class="tab-btn" id="btn-rankings" onclick="showTab('rankings')">🏆 Live Rankings</button>
 </div>
 
-<div id="tab-rankings" class="tab-content active"></div>
-<div id="tab-scores" class="tab-content"></div>
+<div id="tab-scores" class="tab-content active"></div>
+<div id="tab-rankings" class="tab-content"></div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -588,18 +588,12 @@ function buildScoreSheet(wb, type) {
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 }
 
-function doExcel() {
-  const wb = XLSX.utils.book_new();
-  if (S.steel.on) buildScoreSheet(wb, 'steel');
-  if (S.paper.on) buildScoreSheet(wb, 'paper');
-  XLSX.writeFile(wb, (S.date||'results')+'-'+(S.title||'scores').replace(/\s+/g,'-')+'.xlsx');
-}
-
-
+// State
 let S = { title:'',date:'',steel:{on:false,name:'Steel',method:'single',stages:1,penalty:5},paper:{on:false,name:'Paper',shots:12},shooters:[],scores:{} };
-let activeTab = 'rankings';
-let scoreMode = 'both';
-const modeKey = 'share_mode';
+let activeTab = 'scores';
+let scoreMode = localStorage.getItem('live_mode') || 'both';
+const modeKey = 'live_mode';
+const INACTIVE_MS = 4 * 60 * 60 * 1000;
 
 
 function buildCompToggles(mode) {
@@ -717,7 +711,7 @@ function renderRankingsTab(containerId, showExport) {
 
 function showTab(tab) {
   activeTab = tab;
-  ['rankings','scores'].forEach(t => {
+  ['scores','rankings'].forEach(t => {
     document.getElementById('tab-'+t).classList.toggle('active', t===tab);
     document.getElementById('btn-'+t).classList.toggle('active', t===tab);
   });
@@ -726,8 +720,15 @@ function showTab(tab) {
 
 function renderAll() {
   buildCompToggles(scoreMode);
-  renderRankingsTab('tab-rankings', true);
   renderScoresTab('tab-scores');
+  renderRankingsTab('tab-rankings', false);
+}
+
+function showNoComp(msg) {
+  ['tab-scores','tab-rankings'].forEach(id => {
+    document.getElementById(id).innerHTML = '<div class="no-comp"><div class="icon">🎯</div><h2>'+msg+'</h2><p>Check back when a competition is in progress.</p></div>';
+  });
+  document.getElementById('comp-toggles').style.display = 'none';
 }
 
 firebase.initializeApp({
@@ -740,38 +741,36 @@ firebase.initializeApp({
   appId:"1:21456591082:web:32f8ccef1eae124b9f1f93"
 });
 const db = firebase.database();
+let currentKey = null, currentListener = null;
 
-async function init() {
-  const key = new URLSearchParams(window.location.search).get('share');
-  if (!key) {
-    document.getElementById('tab-rankings').innerHTML = '<div class="no-comp"><div class="icon">🎯</div><h2>No share key in URL</h2></div>';
-    return;
-  }
-  try {
-    const snap = await db.ref('shares/'+key).once('value');
+db.ref('currentSession').on('value', snap => {
+  const key = snap.val();
+  if (!key) { showNoComp('No active competition in progress'); return; }
+  if (key === currentKey) return;
+  if (currentKey && currentListener) db.ref('sessions/'+currentKey).off('value', currentListener);
+  currentKey = key;
+  currentListener = db.ref('sessions/'+key).on('value', snap => {
     const data = snap.val();
-    if (!data) {
-      document.getElementById('tab-rankings').innerHTML = '<div class="no-comp"><div class="icon">🔗</div><h2>Link not found or expired</h2></div>';
-      return;
-    }
-    S.title = data.title||'';
-    S.date = data.date||'';
-    S.steel = Object.assign({on:false,name:'Steel',method:'single',stages:1,penalty:5}, data.steel||{});
-    S.paper = Object.assign({on:false,name:'Paper',shots:12}, data.paper||{});
+    if (!data) { showNoComp('Session not found'); return; }
+    S.title = data.meta?.title||'';
+    S.date = data.meta?.date||'';
+    S.steel = Object.assign({on:false,name:'Steel',method:'single',stages:1,penalty:5}, data.meta?.steel||{});
+    S.paper = Object.assign({on:false,name:'Paper',shots:12}, data.meta?.paper||{});
     S.shooters = data.shooters||[];
     S.scores = data.scores||{};
-    document.getElementById('hdr-sub').textContent = (S.title||'Results') + (S.date?' — '+formatDate(S.date):'') + ' · READ ONLY';
+    const lastUpdate = data.meta?.updated||0;
+    const inactive = lastUpdate && (Date.now()-lastUpdate > INACTIVE_MS);
+    if (inactive && !data.meta?.savedAt) { showNoComp('No active competition in progress'); return; }
+    document.getElementById('hdr-sub').textContent = (S.title||'Live Scores') + (S.date?' — '+formatDate(S.date):'');
+    const isFrozen = !!data.meta?.savedAt;
     const badge = document.getElementById('status-badge');
-    badge.textContent = '● Results';
-    badge.style.background = '#2a7a45';
-    badge.classList.remove('pulsing');
-    document.getElementById('sync-badge').textContent = 'READ ONLY';
+    badge.textContent = isFrozen ? '● FINAL' : '● LIVE';
+    badge.style.background = isFrozen ? '#2a7a45' : '#c8372d';
+    if (isFrozen) badge.classList.remove('pulsing'); else badge.classList.add('pulsing');
+    document.getElementById('sync-badge').textContent = 'SYNCED';
     renderAll();
-  } catch(e) {
-    document.getElementById('tab-rankings').innerHTML = '<div class="no-comp"><div class="icon">⚠</div><h2>Error: '+e.message+'</h2></div>';
-  }
-}
-init();
+  });
+});
 </script>
 </body>
 </html>
