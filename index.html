@@ -1,4 +1,5 @@
-<!DOCTYPE html>
+<!DOC
+<datalist id="pistol-makes-list"></datalist>TYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2629,29 +2630,35 @@ function searchLateMembers(query) {
   const guessLast = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : '';
 
   // Build rows
-  let rows = members.map(m =>
-    '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">' +
-    '<span style="font-size:14px"><strong>' + (m.lastName||'') + '</strong>, ' + (m.firstName||'') + '</span>' +
-    '<button class="btn btn-red btn-xs" onclick="addLateMember(\"' + m.id + '\")">Add</button>' +
-    '</div>'
-  ).join('');
+  // Build rows using createElement to avoid quote issues
+  el.innerHTML = '';
+  el.style.display = 'block';
 
-  // Add create option at bottom
+  members.forEach(function(m) {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between';
+    const nameSpan = document.createElement('span');
+    nameSpan.style.fontSize = '14px';
+    nameSpan.innerHTML = '<strong>'+(m.lastName||'')+'</strong>, '+(m.firstName||'');
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn btn-green btn-xs';
+    addBtn.textContent = 'Add';
+    addBtn.onclick = (function(id){ return function(){ addLateMember(id); }; })(m.id);
+    row.appendChild(nameSpan);
+    row.appendChild(addBtn);
+    el.appendChild(row);
+  });
+
   const createLabel = members.length === 0
     ? 'No shooter found — Add shooter'
     : 'Not in the list? Create new shooter';
   const createColor = members.length === 0 ? 'var(--accent)' : 'var(--accent2)';
-    // Add "create new shooter" option at bottom using createElement
-  el.style.display = 'block';
-  el.innerHTML = rows;
   const createDiv = document.createElement('div');
   createDiv.style.cssText = 'padding:10px 14px;text-align:center;cursor:pointer;font-size:13px;font-weight:700;color:'+createColor+';letter-spacing:0.5px;text-transform:uppercase;border-top:1px solid var(--border)';
   createDiv.textContent = createLabel;
   createDiv.onclick = function(){ showLateCreateForm(guessFirst, guessLast); };
   el.appendChild(createDiv);
   createSec.style.display = 'none';
-  return;
-
   createSec.style.display = 'none';
 }
 
