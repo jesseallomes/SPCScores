@@ -1135,6 +1135,9 @@ table.rtable tr:hover td { background: #fafaf8; }
         <label id="late-ro-label" style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
           <input type="checkbox" id="late-is-ro-new" style="width:16px;height:16px;accent-color:var(--gold);margin:0"> RO
         </label>
+        <label id="late-store-label" style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
+          <input type="checkbox" id="late-store-pistols" checked style="width:16px;height:16px;accent-color:var(--accent2);margin:0"> Store pistol details
+        </label>
       </div>
     </div>
     <div class="row2" style="display:none"><!-- kept for legacy refs -->
@@ -1685,8 +1688,24 @@ function showNewShooterRow(first, last) {
   (last ? lastEl : firstEl).focus();
 }
 
+function updateNewShooterState() {
+  const isVisitor = document.getElementById('new-is-visitor')?.checked;
+  const roEl = document.getElementById('new-is-ro');
+  const storeLabel = document.getElementById('new-store-label');
+  const storeEl = document.getElementById('new-store-pistols');
+  if (roEl) { roEl.disabled = isVisitor; if (isVisitor) roEl.checked = false; if (roEl.parentElement) roEl.parentElement.style.opacity = isVisitor ? '0.4' : '1'; }
+  if (storeLabel) storeLabel.style.opacity = isVisitor ? '0.4' : '1';
+  if (storeEl) { storeEl.disabled = isVisitor; if (isVisitor) storeEl.checked = false; }
+}
+
 function hideNewShooterRow() {
   document.getElementById('new-shooter-card').style.display = 'none';
+  const storeEl = document.getElementById('new-store-pistols');
+  if (storeEl) { storeEl.checked = true; storeEl.disabled = false; }
+  const storeLabel = document.getElementById('new-store-label');
+  if (storeLabel) storeLabel.style.opacity = '1';
+  const roEl = document.getElementById('new-is-ro');
+  if (roEl) { roEl.disabled = false; if (roEl.parentElement) roEl.parentElement.style.opacity = '1'; }
 }
 
 function confirmNewShooterRow() {
@@ -1701,14 +1720,14 @@ function confirmNewShooterRow() {
   else lastEl.style.borderColor = '';
   if (!valid) { toast('First and last name are required.', 'error'); return; }
 
-  const isRO = document.getElementById('new-is-ro').checked;
-  const isVisitor = document.getElementById('new-is-visitor').checked;
+  const isRO = document.getElementById('new-is-ro')?.checked || false;
+  const isVisitor = document.getElementById('new-is-visitor')?.checked || false;
+  const storePistols = !isVisitor && (document.getElementById('new-store-pistols')?.checked !== false);
+  const optOutPistols = !storePistols;
 
-  // Add to selectedMemberIds-equivalent by creating a temp entry
-  // Store as a pending new shooter
   if (!window._pendingNewShooters) window._pendingNewShooters = [];
   const tempId = 'new_' + newId();
-  window._pendingNewShooters.push({ tempId, firstName: first, lastName: last, isRO, isVisitor });
+  window._pendingNewShooters.push({ tempId, firstName: first, lastName: last, isRO, isVisitor, optOutPistols });
 
   // Add chip to selected-chips
   const chip = document.createElement('div');
@@ -1889,7 +1908,10 @@ async function confirmAddMember() {
   const isRO = document.getElementById('am-ro') ? document.getElementById('am-ro').checked : false;
   const optOutPistols = document.getElementById('am-optout') ? document.getElementById('am-optout').checked : false;
   const existing = allMembers[mid] || {};
-  const member = { ...existing, id: mid, firstName: first, lastName: last, isRO, optOutPistols, pistols: optOutPistols ? [] : (existing.pistols||[]) };
+  // Opt out = wipe pistols (consent revoked). Opt back in = start fresh (empty).
+  const wasOptedOut = existing.optOutPistols || false;
+  const pistols = optOutPistols ? [] : (wasOptedOut ? [] : (existing.pistols||[]));
+  const member = { ...existing, id: mid, firstName: first, lastName: last, isRO, optOutPistols, pistols };
   allMembers[mid] = member;
   if (db && isFirebaseReady) await db.ref(`members/${mid}`).set(member);
   closeAddMemberModal();
@@ -2286,7 +2308,17 @@ function openPistolModal(sid) {
   document.getElementById('pm-class').value = 'S';
   document.getElementById('pm-calibre-other').value = '';
   document.getElementById('pm-other-wrap').style.display = 'none';
-  setPistolOwnership('owns'); // Default to owns
+  // Visitors can only borrow - default and lock to borrowed
+  const isVisitor = shooter && shooter.isVisitor;
+  if (isVisitor) {
+    setPistolOwnership('borrowed');
+    document.getElementById('pm-owns-btn').disabled = true;
+    document.getElementById('pm-owns-btn').style.opacity = '0.4';
+  } else {
+    setPistolOwnership('owns'); // Default to owns
+    document.getElementById('pm-owns-btn').disabled = false;
+    document.getElementById('pm-owns-btn').style.opacity = '1';
+  }
 
   // Show only previously borrowed pistols in previously used list
   const shooter = S.shooters.find(s => s.id === sid);
@@ -2561,8 +2593,12 @@ function updateLateRoState() {
   const isVisitor = document.querySelector('input[name="late-member-type"]:checked')?.value === 'visitor';
   const roLabel = document.getElementById('late-ro-label');
   const roCheck = document.getElementById('late-is-ro-new');
+  const storeLabel = document.getElementById('late-store-label');
+  const storeCheck = document.getElementById('late-store-pistols');
   if (roLabel) roLabel.style.opacity = isVisitor ? '0.4' : '1';
   if (roCheck) { roCheck.disabled = isVisitor; if (isVisitor) roCheck.checked = false; }
+  if (storeLabel) storeLabel.style.opacity = isVisitor ? '0.4' : '1';
+  if (storeCheck) { storeCheck.disabled = isVisitor; if (isVisitor) storeCheck.checked = false; }
 }
 
 function showLateCreateForm(first, last) {
@@ -2583,6 +2619,10 @@ function showLateCreateForm(first, last) {
   if (roNew) { roNew.checked = false; roNew.disabled = false; }
   const roLabel = document.getElementById('late-ro-label');
   if (roLabel) roLabel.style.opacity = '1';
+  const storeCheck = document.getElementById('late-store-pistols');
+  if (storeCheck) { storeCheck.checked = true; storeCheck.disabled = false; }
+  const storeLabel = document.getElementById('late-store-label');
+  if (storeLabel) storeLabel.style.opacity = '1';
   firstEl.focus();
 }
 
@@ -2620,6 +2660,8 @@ function addLateNewShooter() {
   const isRO = !isVisitor && (document.getElementById('late-is-ro-new')?.checked || false);
 
   // Save to members unless visitor
+  const lateStorePistols = !isVisitor && (document.getElementById('late-store-pistols')?.checked !== false);
+  const lateOptOut = !lateStorePistols;
   let memberId = null;
   if (!isVisitor) {
     // Check if already exists
