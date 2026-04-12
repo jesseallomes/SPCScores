@@ -2453,7 +2453,7 @@ function confirmAddPistol() {
     let cal = document.getElementById('pm-calibre').value;
     if (cal === 'other') cal = document.getElementById('pm-calibre-other').value.trim() || 'Other';
     const make = document.getElementById('pm-make').value.trim();
-  savePistolMake(make);
+    savePistolMake(make);
     const cls = document.getElementById('pm-class').value;
     const type = document.getElementById('pm-type').value;
     const m = allMembers[mid];
@@ -2476,6 +2476,7 @@ function confirmAddPistol() {
   let cal = document.getElementById('pm-calibre').value;
   if (cal === 'other') cal = document.getElementById('pm-calibre-other').value.trim() || 'Other';
   const make = document.getElementById('pm-make').value.trim();
+  savePistolMake(make);
   const cls = document.getElementById('pm-class').value;
   const type = document.getElementById('pm-type').value; // P or R
 
@@ -3367,6 +3368,7 @@ async function confirmAddClubGun() {
   const calibre = document.getElementById('cg-calibre').value;
   const cls = document.getElementById('cg-class').value;
   const editIdx = document.getElementById('cg-edit-id').value;
+  savePistolMake(make);
   const gun = { make, type, calibre, cls };
   if (editIdx !== '') {
     CFG.clubGuns[parseInt(editIdx)] = gun;
