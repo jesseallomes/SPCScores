@@ -1219,6 +1219,20 @@ table.rtable tr:hover td { background: #fafaf8; }
       <label>Specify Calibre</label>
       <input type="text" id="pm-calibre-other" placeholder="e.g. .44 Mag">
     </div>
+    <!-- Owns / Borrowed toggle -->
+    <div style="display:flex;gap:0;margin-bottom:12px;border:2px solid var(--accent2);border-radius:6px;overflow:hidden">
+      <button id="pm-owns-btn" onclick="setPistolOwnership('owns')"
+        style="flex:1;padding:8px;border:none;cursor:pointer;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;background:var(--accent2);color:white">
+        ✓ Owns Pistol
+      </button>
+      <button id="pm-borrowed-btn" onclick="setPistolOwnership('borrowed')"
+        style="flex:1;padding:8px;border:none;cursor:pointer;font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:13px;background:transparent;color:var(--accent2)">
+        ↔ Borrowed
+      </button>
+    </div>
+    <div id="pm-borrowed-note" style="display:none;font-size:12px;color:var(--muted);margin-bottom:10px">
+      Borrowed pistols are not saved to the member's profile.
+    </div>
     <div style="display:flex;gap:10px">
       <button class="btn btn-outline" style="flex:1" onclick="closePistolModal()">Cancel</button>
       <button class="btn btn-red" style="flex:1" onclick="confirmAddPistol()">Add Pistol</button>
@@ -2141,6 +2155,22 @@ function addKnownPistol(sid, pistolIdx) {
   toast(`${p.calibre} ${p.cls} added`, 'success');
 }
 
+function setPistolOwnership(mode) {
+  window._pmOwnership = mode;
+  const ownsBtn = document.getElementById('pm-owns-btn');
+  const borrowedBtn = document.getElementById('pm-borrowed-btn');
+  const note = document.getElementById('pm-borrowed-note');
+  if (mode === 'owns') {
+    ownsBtn.style.background = 'var(--accent2)'; ownsBtn.style.color = 'white';
+    borrowedBtn.style.background = 'transparent'; borrowedBtn.style.color = 'var(--accent2)';
+    note.style.display = 'none';
+  } else {
+    borrowedBtn.style.background = 'var(--accent2)'; borrowedBtn.style.color = 'white';
+    ownsBtn.style.background = 'transparent'; ownsBtn.style.color = 'var(--accent2)';
+    note.style.display = 'block';
+  }
+}
+
 function openPistolModal(sid) {
   document.getElementById('pistol-modal-shooter-id').value = sid;
   document.getElementById('pm-make').value = '';
@@ -2149,22 +2179,24 @@ function openPistolModal(sid) {
   document.getElementById('pm-class').value = 'S';
   document.getElementById('pm-calibre-other').value = '';
   document.getElementById('pm-other-wrap').style.display = 'none';
+  setPistolOwnership('owns'); // Default to owns
 
-  // Show previously used pistols from member profile
+  // Show only previously borrowed pistols in previously used list
   const shooter = S.shooters.find(s => s.id === sid);
   const prevEl = document.getElementById('pm-prev-pistols');
   if (prevEl && shooter && shooter.memberId && allMembers[shooter.memberId]) {
-    const savedPistols = allMembers[shooter.memberId].pistols || [];
-    const clubGuns = (CFG.clubGuns || []).map(g => ({...g, isClubGun: true}));
-    const allOptions = [...savedPistols, ...clubGuns];
-    if (allOptions.length) {
+    const borrowedPistols = (allMembers[shooter.memberId].borrowedPistols || []);
+    if (borrowedPistols.length) {
       prevEl.style.display = 'block';
-      prevEl.innerHTML = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:6px">Previously Used Pistols</div>` +
-        allOptions.map((p, i) => `
-          <button class="btn btn-outline btn-sm" style="margin:3px;text-transform:none;letter-spacing:0;font-family:'Roboto',sans-serif${p.isClubGun?';border-color:var(--gold);color:var(--gold)':''}"
-            onclick="selectPrevPistol('${sid}',${i},${!!p.isClubGun})">
-            ${p.isClubGun?'🏛 ':''}${p.make || '—'} · ${p.calibre} · ${p.type==='R'?'Rev':'Pis'} · ${p.cls}
-          </button>`).join('');
+      prevEl.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:6px">Previously Borrowed</div>' +
+        borrowedPistols.map(function(p, i) {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-outline btn-sm';
+          btn.style.cssText = 'margin:3px;text-transform:none;letter-spacing:0;border-color:var(--gold);color:var(--gold)';
+          btn.textContent = (p.make||'—') + ' · ' + p.calibre + ' · ' + (p.type==='R'?'Rev':'Pis') + ' · ' + p.cls;
+          btn.onclick = function(){ selectBorrowedPistol(sid, i); };
+          return btn.outerHTML;
+        }).join('');
     } else {
       prevEl.style.display = 'none';
     }
@@ -2173,6 +2205,18 @@ function openPistolModal(sid) {
   }
 
   document.getElementById('pistol-modal').classList.add('open');
+}
+
+function selectBorrowedPistol(sid, idx) {
+  const shooter = S.shooters.find(s => s.id === sid);
+  if (!shooter || !shooter.memberId) return;
+  const p = (allMembers[shooter.memberId].borrowedPistols || [])[idx];
+  if (!p) return;
+  document.getElementById('pm-make').value = p.make || '';
+  document.getElementById('pm-type').value = p.type || 'P';
+  document.getElementById('pm-calibre').value = p.calibre || '.22';
+  document.getElementById('pm-class').value = p.cls || 'S';
+  setPistolOwnership('borrowed');
 }
 
 function selectPrevPistol(sid, pistolIdx) {
@@ -2236,7 +2280,8 @@ function confirmAddPistol() {
 
   if (!shooter.pistols) shooter.pistols = [];
   const pi = shooter.pistols.length;
-  const newPistol = { make, calibre: cal, cls, type };
+  const isBorrowed = window._pmOwnership === 'borrowed';
+  const newPistol = { make, calibre: cal, cls, type, isBorrowed: isBorrowed || false };
   shooter.pistols.push(newPistol);
   if (!S.scores[sid]) S.scores[sid] = {};
   S.scores[sid][pi] = { steel: {}, paper: {} };
@@ -2628,6 +2673,19 @@ async function saveShootersToMembers() {
     (s.pistols || []).forEach(sp => {
       if (!sp.calibre) return;
       if (sp.isClubGun) return; // Never store club guns to member profile
+      if (sp.isBorrowed) {
+        // Save to borrowedPistols list for future quick-select, not to main pistols
+        const borrowed = existingMember.borrowedPistols || [];
+        const alreadyBorrowed = borrowed.some(bp =>
+          (bp.calibre||'') === (sp.calibre||'') &&
+          (bp.cls||'') === (sp.cls||'') &&
+          (bp.type||'P') === (sp.type||'P') &&
+          (bp.make||'').trim().toLowerCase() === (sp.make||'').trim().toLowerCase()
+        );
+        if (!alreadyBorrowed) borrowed.push({ make: sp.make||'', calibre: sp.calibre, cls: sp.cls||'S', type: sp.type||'P' });
+        existingMember.borrowedPistols = borrowed;
+        return;
+      }
       const already = memberPistols.some(mp =>
         (mp.calibre || '') === (sp.calibre || '') &&
         (mp.cls || '') === (sp.cls || '') &&
