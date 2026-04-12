@@ -1192,7 +1192,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     <div class="row2">
       <div>
         <label>Pistol Make</label>
-        <input type="text" id="pm-make" placeholder="e.g. CZ, Glock, Ruger">
+        <input type="text" id="pm-make" placeholder="e.g. Glock, Ruger, CZ" list="pistol-makes-list" autocomplete="off">
       </div>
       <div>
         <label>Type</label>
@@ -1282,7 +1282,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     <h3>Add Club Gun</h3>
     <input type="hidden" id="cg-edit-id">
     <div class="row2">
-      <div><label>Make / Name</label><input type="text" id="cg-make" placeholder="e.g. Club Glock"></div>
+      <div><label>Make / Name</label><input type="text" id="cg-make" placeholder="e.g. Club Glock" list="pistol-makes-list" autocomplete="off"></div>
       <div><label>Type</label>
         <select id="cg-type"><option value="P">Pistol</option><option value="R">Revolver</option></select>
       </div>
@@ -1361,6 +1361,7 @@ try {
         listenSession();
         db.ref('currentSession').set(sessionKey);
       }
+      initPistolMakes();
     } else {
       badge.textContent = 'OFFLINE';
       badge.className = 'sync-badge err';
@@ -1374,6 +1375,40 @@ try {
 // ====================================================
 // APP STATE
 // ====================================================
+const PISTOL_MAKES_SEED = ["Glock", "Smith & Wesson", "S&W", "Sig Sauer", "SIG", "Ruger", "Springfield Armory", "Springfield", "Beretta", "Colt", "Heckler & Koch", "H&K", "HK", "CZ", "Walther", "Taurus", "Kimber", "FN Herstal", "FN", "FNH", "Remington", "Mossberg", "Browning", "Magnum Research", "Desert Eagle", "Kahr Arms", "Kahr", "Kel-Tec", "Diamondback", "Caracal", "Canik", "SAR Arms", "SAR", "Arex", "Staccato", "Nighthawk Custom", "Nighthawk", "Wilson Combat", "Les Baer", "Ed Brown", "Dan Wesson", "Rock Island Armory", "Rock Island", "RIA", "Tisas", "Tristar", "EAA", "European American Armory", "Grand Power", "Girsan", "Zastava", "Sarsilmaz", "Stoeger", "IWI", "Israel Weapon Industries", "Jericho", "Tanfoglio", "Pardini", "Morini", "Feinwerkbau", "FWB", "Steyr", "Steyr Arms", "Hammerli", "Anschütz", "Walther", "Benelli", "Pietro Beretta", "Chiappa", "Llama", "Star", "Astra", "Rohm", "Amadeo Rossi", "Rossi", "Charter Arms", "Taurus", "Heritage", "North American Arms", "NAA", "Bond Arms", "Derringer", "American Derringer", "Coonan", "Coonan Arms", "Bul Armory", "Bul", "Sphinx", "B&T", "Brügger & Thomet", "Arsenal", "Zastava Arms", "HS Produkt", "HS", "Caracal International", "Kriss", "Kriss USA", "Standard Manufacturing", "Sccy", "SCCY Industries", "Tippmann", "Auto-Ordnance", "Thompson", "Luger", "Dreyse", "Webley", "Enfield", "Nagant", "Tokarev", "Makarov", "Stechkin", "OTs", "MP-443", "Grach", "Umarex", "Air Arms", "Weihrauch", "Crosman", "Daisy", "Diana", "Gamo"];
+
+let pistolMakes = [];
+
+async function initPistolMakes() {
+  if (!db || !isFirebaseReady) return;
+  const snap = await db.ref('config/pistolMakes').once('value');
+  const stored = snap.val();
+  if (!stored || !stored.length) {
+    // Seed with default list
+    pistolMakes = [...PISTOL_MAKES_SEED];
+    await db.ref('config/pistolMakes').set(pistolMakes);
+  } else {
+    pistolMakes = stored;
+  }
+  updatePistolMakesDatalist();
+}
+
+function updatePistolMakesDatalist() {
+  const dl = document.getElementById('pistol-makes-list');
+  if (!dl) return;
+  dl.innerHTML = pistolMakes.map(m => '<option value="' + m + '">').join('');
+}
+
+async function savePistolMake(make) {
+  if (!make || !make.trim()) return;
+  const trimmed = make.trim();
+  if (pistolMakes.some(m => m.toLowerCase() === trimmed.toLowerCase())) return;
+  pistolMakes.push(trimmed);
+  pistolMakes.sort((a,b) => a.localeCompare(b));
+  if (db && isFirebaseReady) await db.ref('config/pistolMakes').set(pistolMakes);
+  updatePistolMakesDatalist();
+}
+
 let S = {
   date: '',
   title: '',
@@ -2418,6 +2453,7 @@ function confirmAddPistol() {
     let cal = document.getElementById('pm-calibre').value;
     if (cal === 'other') cal = document.getElementById('pm-calibre-other').value.trim() || 'Other';
     const make = document.getElementById('pm-make').value.trim();
+  savePistolMake(make);
     const cls = document.getElementById('pm-class').value;
     const type = document.getElementById('pm-type').value;
     const m = allMembers[mid];
