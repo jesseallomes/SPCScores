@@ -918,7 +918,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-outline" style="flex:1" onclick="hideNewShooterRow()">Cancel</button>
-      <button class="btn btn-red" style="flex:1" onclick="confirmNewShooterRow()">✓ Confirm &amp; Add</button>
+      <button class="btn btn-green" style="flex:1" onclick="confirmNewShooterRow()">✓ Confirm &amp; Add</button>
     </div>
   </div>
   <div id="name-entry-list" style="display:none"></div>
@@ -939,7 +939,7 @@ table.rtable tr:hover td { background: #fafaf8; }
   <div id="score-cards-list"></div>
   <div class="card" style="border: 2px dashed var(--border); background: var(--card); text-align:center; padding: 20px;">
     <div style="color:var(--muted);margin-bottom:10px;font-size:14px">Need to add someone?</div>
-    <button class="btn btn-outline btn-sm" onclick="openLateShooterModal()">+ ADD SHOOTER</button>
+    <button class="btn btn-green btn-sm" onclick="openLateShooterModal()">+ ADD SHOOTER</button>
   </div>
   <div style="height:16px"></div>
   <button class="btn btn-green btn-block" onclick="nav('results')">VIEW RESULTS →</button>
@@ -1125,12 +1125,15 @@ table.rtable tr:hover td { background: #fafaf8; }
         <div><label>First Name</label><input type="text" id="late-first" placeholder="First name" style="margin-bottom:8px"></div>
         <div><label>Last Name</label><input type="text" id="late-last" placeholder="Last name" style="margin-bottom:8px"></div>
       </div>
-      <div style="display:flex;gap:16px;margin-bottom:14px">
+      <div style="display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
-          <input type="radio" name="late-member-type" id="late-is-member" value="member" checked style="accent-color:var(--accent2);width:16px;height:16px"> Member
+          <input type="radio" name="late-member-type" id="late-is-member" value="member" checked style="accent-color:var(--accent2);width:16px;height:16px" onchange="updateLateRoState()"> Member
         </label>
         <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
-          <input type="radio" name="late-member-type" id="late-is-visitor" value="visitor" style="accent-color:var(--muted);width:16px;height:16px"> Visitor
+          <input type="radio" name="late-member-type" id="late-is-visitor" value="visitor" style="accent-color:var(--muted);width:16px;height:16px" onchange="updateLateRoState()"> Visitor
+        </label>
+        <label id="late-ro-label" style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
+          <input type="checkbox" id="late-is-ro-new" style="width:16px;height:16px;accent-color:var(--gold);margin:0"> RO
         </label>
       </div>
     </div>
@@ -1636,28 +1639,34 @@ function searchMemberDropdown(query) {
   const guessFirst = parts[0] ? parts[0].charAt(0).toUpperCase()+parts[0].slice(1) : '';
   const guessLast  = parts[1] ? parts[1].charAt(0).toUpperCase()+parts[1].slice(1) : '';
 
-  let html = matches.map(m => {
-    const already = selectedMemberIds.has(m.id);
-    const roBadge = m.isRO ? ' <span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">RO</span>' : '';
-    const visBadge = m.isVisitor ? ' <span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">VIS</span>' : '';
-    return '<div onclick="' + (already ? '' : 'addMemberFromDropdown(\"'+m.id+'\")') + '"' +
-      ' style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:'+(already?'default':'pointer')+';background:'+(already?'var(--bg)':'var(--card)')+';opacity:'+(already?'0.5':'1')+'">' +
-      '<span style="font-size:15px"><strong>'+(m.lastName||'')+'</strong>, '+(m.firstName||'')+roBadge+visBadge+'</span>' +
-      '<span style="font-size:13px;color:'+(already?'var(--muted)':'var(--accent2)')+'">'+
-      (already ? '✓ Added' : '+ Add')+'</span></div>';
-  }).join('');
-
-  // "Not in list" / "No shooter found" option at bottom
-  const createLabel = matches.length === 0 ? 'No shooter found — Add shooter' : 'Not in the list? Add new shooter';
-  const createColor = matches.length === 0 ? 'var(--accent)' : 'var(--accent2)';
-  html += '<div id="reg-create-trigger" style="padding:10px 14px;text-align:center;cursor:pointer;font-size:13px;font-weight:700;color:'+createColor+';letter-spacing:0.5px;text-transform:uppercase;border-top:1px solid var(--border)">' + createLabel + '</div>';
-
-  dropdown.innerHTML = html;
+  dropdown.innerHTML = '';
   dropdown.style.display = 'block';
 
-  // Wire up create trigger after render
-  const trigger = document.getElementById('reg-create-trigger');
-  if (trigger) trigger.onclick = function(){ showNewShooterRow(guessFirst, guessLast); dropdown.style.display='none'; document.getElementById('member-search').value=''; };
+  matches.forEach(function(m) {
+    const already = selectedMemberIds.has(m.id);
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:'+(already?'default':'pointer')+';background:var(--card);opacity:'+(already?'0.5':'1');
+    const nameSpan = document.createElement('span');
+    nameSpan.style.fontSize = '15px';
+    nameSpan.innerHTML = '<strong>'+(m.lastName||'')+'</strong>, '+(m.firstName||'')
+      +(m.isRO?' <span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">RO</span>':'')
+      +(m.isVisitor?' <span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">VIS</span>':'');
+    const addSpan = document.createElement('span');
+    addSpan.style.cssText = 'font-size:13px;font-weight:700;color:'+(already?'var(--muted)':'var(--green)');
+    addSpan.textContent = already ? '✓ Added' : '+ Add';
+    row.appendChild(nameSpan);
+    row.appendChild(addSpan);
+    if (!already) row.onclick = (function(id){ return function(){ addMemberFromDropdown(id); }; })(m.id);
+    dropdown.appendChild(row);
+  });
+
+  // "Not in list" option
+  const createLabel = matches.length === 0 ? 'No shooter found — Add shooter' : 'Not in the list? Add new shooter';
+  const createDiv = document.createElement('div');
+  createDiv.style.cssText = 'padding:10px 14px;text-align:center;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;border-top:1px solid var(--border);color:'+(matches.length===0?'var(--accent)':'var(--accent2)');
+  createDiv.textContent = createLabel;
+  createDiv.onclick = function(){ showNewShooterRow(guessFirst, guessLast); dropdown.style.display='none'; document.getElementById('member-search').value=''; };
+  dropdown.appendChild(createDiv);
 }
 
 function showNewShooterRow(first, last) {
@@ -2489,6 +2498,8 @@ function openLateShooterModal() {
   document.getElementById('late-last').style.borderColor = '';
   const mr = document.getElementById('late-is-member');
   if (mr) mr.checked = true;
+  const roNew = document.getElementById('late-is-ro-new');
+  if (roNew) { roNew.checked = false; roNew.disabled = false; }
   document.getElementById('late-modal').classList.add('open');
 }
 
@@ -2546,6 +2557,14 @@ function searchLateMembers(query) {
   createSec.style.display = 'none';
 }
 
+function updateLateRoState() {
+  const isVisitor = document.querySelector('input[name="late-member-type"]:checked')?.value === 'visitor';
+  const roLabel = document.getElementById('late-ro-label');
+  const roCheck = document.getElementById('late-is-ro-new');
+  if (roLabel) roLabel.style.opacity = isVisitor ? '0.4' : '1';
+  if (roCheck) { roCheck.disabled = isVisitor; if (isVisitor) roCheck.checked = false; }
+}
+
 function showLateCreateForm(first, last) {
   const firstEl = document.getElementById('late-first');
   const lastEl = document.getElementById('late-last');
@@ -2560,6 +2579,10 @@ function showLateCreateForm(first, last) {
   document.getElementById('late-member-list').style.display = 'none';
   const memberRadio = document.getElementById('late-is-member');
   if (memberRadio) memberRadio.checked = true;
+  const roNew = document.getElementById('late-is-ro-new');
+  if (roNew) { roNew.checked = false; roNew.disabled = false; }
+  const roLabel = document.getElementById('late-ro-label');
+  if (roLabel) roLabel.style.opacity = '1';
   firstEl.focus();
 }
 
@@ -2593,8 +2616,8 @@ function addLateNewShooter() {
   if (!first) { firstEl.style.borderColor = 'var(--accent)'; valid = false; } else { firstEl.style.borderColor = ''; }
   if (!last) { lastEl.style.borderColor = 'var(--accent)'; valid = false; } else { lastEl.style.borderColor = ''; }
   if (!valid) { toast('First and last name are required.', 'error'); return; }
-  const isRO = false;
   const isVisitor = document.querySelector('input[name="late-member-type"]:checked')?.value === 'visitor';
+  const isRO = !isVisitor && (document.getElementById('late-is-ro-new')?.checked || false);
 
   // Save to members unless visitor
   let memberId = null;
