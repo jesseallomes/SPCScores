@@ -1899,6 +1899,27 @@ function closeAddMemberModal() {
   document.getElementById('add-member-modal').classList.remove('open');
 }
 
+async function toggleOptOutPistols(mid) {
+  const m = allMembers[mid];
+  if (!m) return;
+  const newVal = !m.optOutPistols;
+  if (newVal && (m.pistols||[]).length > 0) {
+    // Opting out AND has stored pistols — warn first
+    const el = document.getElementById('optout-' + mid);
+    if (!confirm('This will permanently delete all saved pistol details for ' + m.firstName + ' ' + m.lastName + '.\n\nDo you want to proceed?')) {
+      // Revert checkbox
+      if (el) el.checked = true;
+      return;
+    }
+  }
+  m.optOutPistols = newVal;
+  if (newVal) m.pistols = [];
+  allMembers[mid] = m;
+  if (db && isFirebaseReady) await db.ref('members/' + mid).set(m);
+  await loadMembersList();
+  toast(newVal ? 'Pistol storage disabled — data wiped' : 'Pistol storage enabled', 'success');
+}
+
 async function confirmAddMember() {
   const first = document.getElementById('am-first').value.trim();
   const last = document.getElementById('am-last').value.trim();
@@ -1910,13 +1931,21 @@ async function confirmAddMember() {
   const existing = allMembers[mid] || {};
   // Opt out = wipe pistols (consent revoked). Opt back in = start fresh (empty).
   const wasOptedOut = existing.optOutPistols || false;
+  if (optOutPistols && !wasOptedOut && (existing.pistols||[]).length > 0) {
+    if (!confirm('This will permanently delete all saved pistol details for ' + first + ' ' + last + '.\n\nDo you want to proceed?')) {
+      // Revert checkbox
+      const optEl = document.getElementById('am-optout');
+      if (optEl) optEl.checked = false;
+      return;
+    }
+  }
   const pistols = optOutPistols ? [] : (wasOptedOut ? [] : (existing.pistols||[]));
   const member = { ...existing, id: mid, firstName: first, lastName: last, isRO, optOutPistols, pistols };
   allMembers[mid] = member;
   if (db && isFirebaseReady) await db.ref(`members/${mid}`).set(member);
   closeAddMemberModal();
   renderMemberTicklist();
-  if (document.getElementById('page-members').classList.contains('active')) await loadMembersList();
+  await loadMembersList();
   toast(`${first} ${last} saved`, 'success');
 }
 
@@ -2724,7 +2753,9 @@ async function loadMembersList() {
           <span style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase">${m.lastName||''}, ${m.firstName||''}</span>
           ${m.isRO ? '<span style="margin-left:6px;background:var(--gold);color:#000;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">RO</span>' : ''}
           ${m.isVisitor ? '<span style="margin-left:6px;background:#888;color:#fff;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">VISITOR</span>' : ''}
-          ${m.optOutPistols ? '<span style="margin-left:6px;background:#eee;color:#888;padding:2px 7px;border-radius:3px;font-size:11px">No pistol storage</span>' : ''}
+          '          <label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;cursor:pointer;font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0" onclick="event.stopPropagation()">'
+          + '<input type="checkbox" ' + (m.optOutPistols ? '' : 'checked') + ' style="width:14px;height:14px;accent-color:var(--accent2);margin:0" onchange="toggleOptOutPistols(\'' + m.id + '\')">' + 
+          + 'Store pistols</label>'
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-xs btn-outline" onclick="editMember('${m.id}')">✏ Edit</button>
@@ -2735,7 +2766,7 @@ async function loadMembersList() {
       </div>
       <div style="margin-bottom:8px">${pistolList || '<span style="font-size:12px;color:var(--muted)">No pistols saved yet</span>'}</div>
       ${m.optOutPistols 
-        ? '<button class="btn btn-outline btn-sm" disabled style="opacity:0.4;cursor:not-allowed">+ Add Pistol (disabled — no storage)</button>'
+        ? '<button class="btn btn-outline btn-sm" disabled style="opacity:0.4;cursor:not-allowed">+ Add Pistol</button>'
         : `<button class="btn btn-outline btn-sm" onclick="openAddMemberPistolModal('${m.id}')">+ Add Pistol</button>`
       }
     </div>`;
