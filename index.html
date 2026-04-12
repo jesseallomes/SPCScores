@@ -2619,10 +2619,11 @@ async function saveShootersToMembers() {
       existingMember = { id: memberId, firstName: fName, lastName: lName, pistols: [] };
     }
 
-    // Merge pistols without duplicating
+    // Merge pistols without duplicating — skip club guns
     const memberPistols = existingMember.pistols || [];
     (s.pistols || []).forEach(sp => {
       if (!sp.calibre) return;
+      if (sp.isClubGun) return; // Never store club guns to member profile
       const already = memberPistols.some(mp =>
         (mp.calibre || '') === (sp.calibre || '') &&
         (mp.cls || '') === (sp.cls || '') &&
