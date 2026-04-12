@@ -1902,13 +1902,13 @@ function closeAddMemberModal() {
 async function toggleOptOutPistols(mid) {
   const m = allMembers[mid];
   if (!m) return;
+  // newVal = true means opting OUT (unchecking "store pistols")
   const newVal = !m.optOutPistols;
   if (newVal && (m.pistols||[]).length > 0) {
-    // Opting out AND has stored pistols — warn first
-    const el = document.getElementById('optout-' + mid);
+    // Warn before wiping
     if (!confirm('This will permanently delete all saved pistol details for ' + m.firstName + ' ' + m.lastName + '.\n\nDo you want to proceed?')) {
-      // Revert checkbox
-      if (el) el.checked = true;
+      // User cancelled — reload list to restore checkbox to correct visual state
+      await loadMembersList();
       return;
     }
   }
