@@ -1123,14 +1123,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     <div class="row2" style="display:none"><!-- kept for legacy refs -->
       <div><input type="hidden" id="late-first-unused"><input type="hidden" id="late-last-unused"></div>
     </div>
-    <div style="display:flex;gap:16px;margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
-        <input type="checkbox" id="late-is-ro" style="width:18px;height:18px;accent-color:var(--gold);margin:0"> RO
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
-        <input type="checkbox" id="late-is-visitor" style="width:18px;height:18px;accent-color:var(--muted);margin:0"> Visitor (not saved to members)
-      </label>
-    </div>
+    
     <div style="display:flex;gap:10px">
       <button class="btn btn-outline" style="flex:1" onclick="closeLateModal()">Cancel</button>
       <button class="btn btn-red" style="flex:1" id="late-add-btn" onclick="addLateNewShooter()">Add Shooter</button>
@@ -2473,14 +2466,20 @@ function searchLateMembers(query) {
 }
 
 function showLateCreateForm(first, last) {
-  document.getElementById('late-first').value = first || '';
-  document.getElementById('late-last').value = last || '';
+  const firstEl = document.getElementById('late-first');
+  const lastEl = document.getElementById('late-last');
+  firstEl.value = first || '';
+  lastEl.value = last || '';
+  firstEl.style.borderColor = '';
+  lastEl.style.borderColor = '';
+  // Clear red on input
+  firstEl.oninput = function(){ if (this.value.trim()) this.style.borderColor = ''; };
+  lastEl.oninput = function(){ if (this.value.trim()) this.style.borderColor = ''; };
   document.getElementById('late-create-section').style.display = 'block';
   document.getElementById('late-member-list').style.display = 'none';
-  // Reset to member
   const memberRadio = document.getElementById('late-is-member');
   if (memberRadio) memberRadio.checked = true;
-  document.getElementById('late-first').focus();
+  firstEl.focus();
 }
 
 function renderLateMemberList() {
@@ -2504,9 +2503,15 @@ function addLateMember(mid) {
 }
 
 function addLateNewShooter() {
-  const first = document.getElementById('late-first').value.trim();
-  const last = document.getElementById('late-last').value.trim();
-  if (!first) { toast('Please enter a first name.', 'error'); return; }
+  const firstEl = document.getElementById('late-first');
+  const lastEl = document.getElementById('late-last');
+  const first = firstEl.value.trim();
+  const last = lastEl.value.trim();
+  // Validate both required
+  let valid = true;
+  if (!first) { firstEl.style.borderColor = 'var(--accent)'; valid = false; } else { firstEl.style.borderColor = ''; }
+  if (!last) { lastEl.style.borderColor = 'var(--accent)'; valid = false; } else { lastEl.style.borderColor = ''; }
+  if (!valid) { toast('First and last name are required.', 'error'); return; }
   const isRO = false;
   const isVisitor = document.querySelector('input[name="late-member-type"]:checked')?.value === 'visitor';
 
