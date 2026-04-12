@@ -1096,15 +1096,32 @@ table.rtable tr:hover td { background: #fafaf8; }
   <div class="modal">
     <h3>Add Shooter</h3>
     <div style="position:relative;margin-bottom:8px">
-      <input type="text" id="late-search" placeholder="🔍 Search members..." 
+      <input type="text" id="late-search" placeholder="🔍 Search name..."
         oninput="searchLateMembers(this.value)" autocomplete="off"
         style="margin-bottom:0">
     </div>
-    <div id="late-member-list" style="max-height:200px;overflow-y:auto;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;display:none"></div>
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:8px">— ADD NEW PERSON —</div>
-    <div class="row2">
-      <div><label>First Name</label><input type="text" id="late-first" placeholder="First name" style="margin-bottom:8px"></div>
-      <div><label>Last Name</label><input type="text" id="late-last" placeholder="Last name" style="margin-bottom:8px"></div>
+    <div id="late-member-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;display:none;margin-bottom:0"></div>
+
+    <!-- Create new shooter section — hidden until triggered -->
+    <div id="late-create-section" style="display:none;margin-top:10px">
+      <div style="background:#fde8e8;border:1px solid #e55;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;font-weight:700;color:#c8372d;text-transform:uppercase;letter-spacing:0.5px">
+        ⚠ Confirm shooter's name is correct
+      </div>
+      <div class="row2">
+        <div><label>First Name</label><input type="text" id="late-first" placeholder="First name" style="margin-bottom:8px"></div>
+        <div><label>Last Name</label><input type="text" id="late-last" placeholder="Last name" style="margin-bottom:8px"></div>
+      </div>
+      <div style="display:flex;gap:16px;margin-bottom:14px">
+        <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
+          <input type="radio" name="late-member-type" id="late-is-member" value="member" checked style="accent-color:var(--accent2);width:16px;height:16px"> Member
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
+          <input type="radio" name="late-member-type" id="late-is-visitor" value="visitor" style="accent-color:var(--muted);width:16px;height:16px"> Visitor
+        </label>
+      </div>
+    </div>
+    <div class="row2" style="display:none"><!-- kept for legacy refs -->
+      <div><input type="hidden" id="late-first-unused"><input type="hidden" id="late-last-unused"></div>
     </div>
     <div style="display:flex;gap:16px;margin-bottom:14px">
       <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;letter-spacing:0;font-size:14px;cursor:pointer">
@@ -1116,7 +1133,7 @@ table.rtable tr:hover td { background: #fafaf8; }
     </div>
     <div style="display:flex;gap:10px">
       <button class="btn btn-outline" style="flex:1" onclick="closeLateModal()">Cancel</button>
-      <button class="btn btn-red" style="flex:1" onclick="addLateNewShooter()">Add Shooter</button>
+      <button class="btn btn-red" style="flex:1" id="late-add-btn" onclick="addLateNewShooter()">Add Shooter</button>
     </div>
   </div>
 </div>
@@ -2392,8 +2409,11 @@ function openLateShooterModal() {
   document.getElementById('late-search').value = '';
   document.getElementById('late-member-list').style.display = 'none';
   document.getElementById('late-member-list').innerHTML = '';
+  document.getElementById('late-create-section').style.display = 'none';
   document.getElementById('late-first').value = '';
   document.getElementById('late-last').value = '';
+  const mr = document.getElementById('late-is-member');
+  if (mr) mr.checked = true;
   document.getElementById('late-modal').classList.add('open');
   renderLateMemberList();
 }
@@ -2404,30 +2424,63 @@ function closeLateModal() {
 
 function searchLateMembers(query) {
   const el = document.getElementById('late-member-list');
+  const createSec = document.getElementById('late-create-section');
   if (!el) return;
   const q = (query || '').trim().toLowerCase();
-  if (!q) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (!q) {
+    el.style.display = 'none'; el.innerHTML = '';
+    createSec.style.display = 'none';
+    return;
+  }
   const members = Object.values(allMembers)
     .filter(m => !S.shooters.find(s => s.memberId === m.id))
     .filter(m => {
       const full = ((m.firstName||'') + ' ' + (m.lastName||'')).toLowerCase();
-      const last = (m.lastName||'').toLowerCase();
-      const first = (m.firstName||'').toLowerCase();
-      return full.includes(q) || last.startsWith(q) || first.startsWith(q);
+      return full.includes(q) || (m.lastName||'').toLowerCase().startsWith(q) || (m.firstName||'').toLowerCase().startsWith(q);
     })
     .sort((a,b) => (a.lastName||'').localeCompare(b.lastName||''));
-  if (!members.length) {
-    el.style.display = 'block';
-    el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">No members found — add as new below</div>';
-    return;
-  }
-  el.style.display = 'block';
-  el.innerHTML = members.map(m =>
+
+  // Parse search query into first/last for create section
+  const parts = q.trim().split(/\s+/);
+  const guessFirst = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : '';
+  const guessLast = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : '';
+
+  // Build rows
+  let rows = members.map(m =>
     '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">' +
     '<span style="font-size:14px"><strong>' + (m.lastName||'') + '</strong>, ' + (m.firstName||'') + '</span>' +
     '<button class="btn btn-red btn-xs" onclick="addLateMember(\"' + m.id + '\")">Add</button>' +
     '</div>'
   ).join('');
+
+  // Add create option at bottom
+  const createLabel = members.length === 0
+    ? 'No shooter found — Add shooter'
+    : 'Not in the list? Create new shooter';
+  const createColor = members.length === 0 ? 'var(--accent)' : 'var(--accent2)';
+    // Add "create new shooter" option at bottom using createElement
+  el.style.display = 'block';
+  el.innerHTML = rows;
+  const createDiv = document.createElement('div');
+  createDiv.style.cssText = 'padding:10px 14px;text-align:center;cursor:pointer;font-size:13px;font-weight:700;color:'+createColor+';letter-spacing:0.5px;text-transform:uppercase;border-top:1px solid var(--border)';
+  createDiv.textContent = createLabel;
+  createDiv.onclick = function(){ showLateCreateForm(guessFirst, guessLast); };
+  el.appendChild(createDiv);
+  createSec.style.display = 'none';
+  return;
+
+  createSec.style.display = 'none';
+}
+
+function showLateCreateForm(first, last) {
+  document.getElementById('late-first').value = first || '';
+  document.getElementById('late-last').value = last || '';
+  document.getElementById('late-create-section').style.display = 'block';
+  document.getElementById('late-member-list').style.display = 'none';
+  // Reset to member
+  const memberRadio = document.getElementById('late-is-member');
+  if (memberRadio) memberRadio.checked = true;
+  document.getElementById('late-first').focus();
 }
 
 function renderLateMemberList() {
@@ -2453,9 +2506,9 @@ function addLateMember(mid) {
 function addLateNewShooter() {
   const first = document.getElementById('late-first').value.trim();
   const last = document.getElementById('late-last').value.trim();
-  if (!first) { alert('Please enter a first name.'); return; }
-  const isRO = document.getElementById('late-is-ro').checked;
-  const isVisitor = document.getElementById('late-is-visitor').checked;
+  if (!first) { toast('Please enter a first name.', 'error'); return; }
+  const isRO = false;
+  const isVisitor = document.querySelector('input[name="late-member-type"]:checked')?.value === 'visitor';
 
   // Save to members unless visitor
   let memberId = null;
