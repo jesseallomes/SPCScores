@@ -2619,6 +2619,10 @@ async function saveShootersToMembers() {
       existingMember = { id: memberId, firstName: fName, lastName: lName, pistols: [] };
     }
 
+    // Skip pistol merge if member has opted out of pistol storage
+    if (existingMember.optOutPistols) {
+      existingMember.pistols = existingMember.pistols || [];
+    } else {
     // Merge pistols without duplicating — skip club guns
     const memberPistols = existingMember.pistols || [];
     (s.pistols || []).forEach(sp => {
@@ -2651,6 +2655,7 @@ async function saveShootersToMembers() {
       return aR - bR;
     });
     existingMember.pistols = memberPistols;
+    } // end optOutPistols check
     existingMember.firstName = fName;
     existingMember.lastName = lName;
 
