@@ -1916,7 +1916,7 @@ async function confirmAddMember() {
   if (db && isFirebaseReady) await db.ref(`members/${mid}`).set(member);
   closeAddMemberModal();
   renderMemberTicklist();
-  if (document.getElementById('page-members').classList.contains('active')) loadMembersList();
+  if (document.getElementById('page-members').classList.contains('active')) await loadMembersList();
   toast(`${first} ${last} saved`, 'success');
 }
 
