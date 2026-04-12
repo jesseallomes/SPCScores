@@ -893,21 +893,35 @@ table.rtable tr:hover td { background: #fafaf8; }
     <div id="selected-count" style="font-size:12px;color:var(--muted);margin-top:6px;font-family:'Roboto Mono',monospace"></div>
   </div>
 
-  <!-- Manual entry for new shooters -->
-  <div class="card">
-    <div class="card-title">➕ Add New Shooters</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 70px 32px;gap:6px;margin-bottom:6px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">First Name</div>
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">Last Name</div>
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">RO</div>
-      <div></div>
+  <!-- New shooter row - hidden until "not in list" tapped -->
+  <div id="new-shooter-card" class="card" style="display:none">
+    <div style="background:#fde8e8;border:1px solid #e55;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;font-weight:700;color:#c8372d;text-transform:uppercase;letter-spacing:0.5px">
+      ⚠ Confirm shooter's name is correct
     </div>
-    <div id="name-entry-list"></div>
-    <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" onclick="addNameRow(false)">+ Add Row</button>
-      <button class="btn btn-outline btn-sm" onclick="addNameRow(true)" style="color:var(--muted);border-color:var(--muted)">+ Add Visitor Row</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px">First Name</label>
+        <input type="text" id="new-first" placeholder="First name" style="margin-bottom:0">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:4px">Last Name</label>
+        <input type="text" id="new-last" placeholder="Last name" style="margin-bottom:0">
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="new-is-ro" style="width:18px;height:18px;accent-color:var(--gold);margin:0"> RO
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;font-size:14px;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="new-is-visitor" style="width:18px;height:18px;accent-color:var(--muted);margin:0"> Visitor
+      </label>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" style="flex:1" onclick="hideNewShooterRow()">Cancel</button>
+      <button class="btn btn-red" style="flex:1" onclick="confirmNewShooterRow()">✓ Confirm &amp; Add</button>
     </div>
   </div>
+  <div id="name-entry-list" style="display:none"></div>
 
   <button class="btn btn-red btn-block" onclick="confirmShooters()">✓ CONFIRM & GO TO SCORE ENTRY →</button>
 </div>
@@ -1568,18 +1582,15 @@ function addNameRow(isVisitor=false, first='', last='') {
   const div = document.createElement('div');
   div.className = 'shooter-entry-row';
   div.id = 'row-' + id;
-  div.dataset.visitor = isVisitor ? 'true' : 'false';
-  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 70px 32px;gap:6px;margin-bottom:8px;align-items:center';
-  const roCell = isVisitor
-    ? `<div style="font-size:11px;color:var(--muted);text-align:center;font-family:'Roboto Mono',monospace">VIS</div>`
-    : `<label style="display:flex;align-items:center;justify-content:center;gap:4px;margin:0;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0">
-         <input type="checkbox" class="ro-check" style="width:18px;height:18px;accent-color:var(--gold);margin:0"> RO
-       </label>`;
-  div.innerHTML = `
-    <input type="text" placeholder="First name" value="${first}" style="margin-bottom:0">
-    <input type="text" placeholder="Last name" value="${last}" style="margin-bottom:0">
-    ${roCell}
-    <button class="remove-row-btn" onclick="removeNameRow('${id}')">×</button>`;
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 50px 60px 32px;gap:6px;margin-bottom:8px;align-items:center';
+  div.innerHTML =
+    '<input type="text" placeholder="First name" value="' + first + '" style="margin-bottom:0">' +
+    '<input type="text" placeholder="Last name" value="' + last + '" style="margin-bottom:0">' +
+    '<label style="display:flex;align-items:center;justify-content:center;gap:4px;margin:0;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0">' +
+      '<input type="checkbox" class="ro-check" style="width:18px;height:18px;accent-color:var(--gold);margin:0"></label>' +
+    '<label style="display:flex;align-items:center;justify-content:center;gap:4px;margin:0;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0">' +
+      '<input type="checkbox" class="visitor-check" ' + (isVisitor ? 'checked' : '') + ' style="width:18px;height:18px;accent-color:var(--muted);margin:0"></label>' +
+    '<button class="remove-row-btn" onclick="removeNameRow(\"' + id + '\")">×</button>';
   document.getElementById('name-entry-list').appendChild(div);
 }
 
@@ -1611,36 +1622,103 @@ function searchMemberDropdown(query) {
   const dropdown = document.getElementById('member-dropdown');
   if (!dropdown) return;
   const q = (query||'').toLowerCase().trim();
-
   if (!q) { dropdown.style.display = 'none'; return; }
 
   const all = Object.values(allMembers).sort((a,b) =>
     (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||''));
-
   const matches = all.filter(m =>
     ((m.lastName||'')+' '+(m.firstName||'')).toLowerCase().includes(q) ||
     ((m.firstName||'')+' '+(m.lastName||'')).toLowerCase().includes(q)
   );
 
-  if (!matches.length) {
-    dropdown.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:13px">No match — add below as new shooter</div>';
-    dropdown.style.display = 'block';
-    return;
-  }
+  // Parse query into first/last for pre-filling new row
+  const parts = q.trim().split(/\s+/);
+  const guessFirst = parts[0] ? parts[0].charAt(0).toUpperCase()+parts[0].slice(1) : '';
+  const guessLast  = parts[1] ? parts[1].charAt(0).toUpperCase()+parts[1].slice(1) : '';
 
-  dropdown.innerHTML = matches.map(m => {
+  let html = matches.map(m => {
     const already = selectedMemberIds.has(m.id);
     const roBadge = m.isRO ? ' <span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">RO</span>' : '';
     const visBadge = m.isVisitor ? ' <span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">VIS</span>' : '';
-    return `<div onclick="${already ? '' : `addMemberFromDropdown('${m.id}')`}"
-      style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:${already?'default':'pointer'};background:${already?'var(--bg)':'var(--card)'};opacity:${already?'0.5':'1'}">
-      <span style="font-size:15px"><strong>${m.lastName||''}</strong>, ${m.firstName||''}${roBadge}${visBadge}</span>
-      <span style="font-size:13px;color:${already?'var(--muted)':'var(--accent2)'}">
-        ${already ? '✓ Added' : '+ Add'}
-      </span>
-    </div>`;
+    return '<div onclick="' + (already ? '' : 'addMemberFromDropdown(\"'+m.id+'\")') + '"' +
+      ' style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:'+(already?'default':'pointer')+';background:'+(already?'var(--bg)':'var(--card)')+';opacity:'+(already?'0.5':'1')+'">' +
+      '<span style="font-size:15px"><strong>'+(m.lastName||'')+'</strong>, '+(m.firstName||'')+roBadge+visBadge+'</span>' +
+      '<span style="font-size:13px;color:'+(already?'var(--muted)':'var(--accent2)')+'">'+
+      (already ? '✓ Added' : '+ Add')+'</span></div>';
   }).join('');
+
+  // "Not in list" / "No shooter found" option at bottom
+  const createLabel = matches.length === 0 ? 'No shooter found — Add shooter' : 'Not in the list? Add new shooter';
+  const createColor = matches.length === 0 ? 'var(--accent)' : 'var(--accent2)';
+  html += '<div id="reg-create-trigger" style="padding:10px 14px;text-align:center;cursor:pointer;font-size:13px;font-weight:700;color:'+createColor+';letter-spacing:0.5px;text-transform:uppercase;border-top:1px solid var(--border)">' + createLabel + '</div>';
+
+  dropdown.innerHTML = html;
   dropdown.style.display = 'block';
+
+  // Wire up create trigger after render
+  const trigger = document.getElementById('reg-create-trigger');
+  if (trigger) trigger.onclick = function(){ showNewShooterRow(guessFirst, guessLast); dropdown.style.display='none'; document.getElementById('member-search').value=''; };
+}
+
+function showNewShooterRow(first, last) {
+  const card = document.getElementById('new-shooter-card');
+  const firstEl = document.getElementById('new-first');
+  const lastEl = document.getElementById('new-last');
+  firstEl.value = first || '';
+  lastEl.value = last || '';
+  firstEl.style.borderColor = '';
+  lastEl.style.borderColor = '';
+  document.getElementById('new-is-ro').checked = false;
+  document.getElementById('new-is-visitor').checked = false;
+  firstEl.oninput = function(){ if(this.value.trim()) this.style.borderColor = ''; };
+  lastEl.oninput = function(){ if(this.value.trim()) this.style.borderColor = ''; };
+  card.style.display = 'block';
+  (last ? lastEl : firstEl).focus();
+}
+
+function hideNewShooterRow() {
+  document.getElementById('new-shooter-card').style.display = 'none';
+}
+
+function confirmNewShooterRow() {
+  const firstEl = document.getElementById('new-first');
+  const lastEl = document.getElementById('new-last');
+  const first = firstEl.value.trim();
+  const last = lastEl.value.trim();
+  let valid = true;
+  if (!first) { firstEl.style.borderColor = 'var(--accent)'; valid = false; }
+  else firstEl.style.borderColor = '';
+  if (!last) { lastEl.style.borderColor = 'var(--accent)'; valid = false; }
+  else lastEl.style.borderColor = '';
+  if (!valid) { toast('First and last name are required.', 'error'); return; }
+
+  const isRO = document.getElementById('new-is-ro').checked;
+  const isVisitor = document.getElementById('new-is-visitor').checked;
+
+  // Add to selectedMemberIds-equivalent by creating a temp entry
+  // Store as a pending new shooter
+  if (!window._pendingNewShooters) window._pendingNewShooters = [];
+  const tempId = 'new_' + newId();
+  window._pendingNewShooters.push({ tempId, firstName: first, lastName: last, isRO, isVisitor });
+
+  // Add chip to selected-chips
+  const chip = document.createElement('div');
+  chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:var(--accent2);color:white;padding:5px 10px;border-radius:20px;font-size:13px;font-weight:700';
+  const nameSpan = document.createTextNode(first + ' ' + last);
+  chip.appendChild(nameSpan);
+  if (isRO) { const b = document.createElement('span'); b.style.cssText='background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700'; b.textContent='RO'; chip.appendChild(b); }
+  if (isVisitor) { const b = document.createElement('span'); b.style.cssText='background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700'; b.textContent='VIS'; chip.appendChild(b); }
+  const x = document.createElement('span'); x.style.cssText='cursor:pointer;font-size:16px;line-height:1;margin-left:2px'; x.textContent='×';
+  x.onclick = (function(tid,c){ return function(){ removePendingShooter(tid,c); }; })(tempId, chip);
+  chip.appendChild(x);
+  document.getElementById('selected-chips').appendChild(chip);
+
+  hideNewShooterRow();
+}
+
+function removePendingShooter(tempId, chip) {
+  window._pendingNewShooters = (window._pendingNewShooters||[]).filter(p => p.tempId !== tempId);
+  chip.remove();
 }
 
 function addMemberFromDropdown(mid) {
@@ -1722,9 +1800,15 @@ function confirmShooters() {
     const inputs = row.querySelectorAll('input[type=text]');
     const first = (inputs[0]?.value||'').trim();
     const last = (inputs[1]?.value||'').trim();
-    if (!first) return;
+    if (!first || !last) {
+      // Highlight missing fields
+      if (!first && inputs[0]) inputs[0].style.borderColor = 'var(--accent)';
+      if (!last && inputs[1]) inputs[1].style.borderColor = 'var(--accent)';
+      return;
+    }
     if (S.shooters.find(s => s.firstName===first && s.lastName===last)) return;
-    const isVisitor = row.dataset.visitor === 'true';
+    const visitorCheck = row.querySelector('.visitor-check');
+    const isVisitor = visitorCheck ? visitorCheck.checked : false;
     const roCheck = row.querySelector('.ro-check');
     const isRO = !isVisitor && roCheck ? roCheck.checked : false;
     const shooter = {
@@ -2395,20 +2479,17 @@ function removePistol(sid, pi) {
 // LATE ARRIVAL MODAL
 // ====================================================
 function openLateShooterModal() {
-  document.getElementById('late-first').value = '';
-  document.getElementById('late-last').value = '';
-  document.getElementById('late-is-ro').checked = false;
-  document.getElementById('late-is-visitor').checked = false;
   document.getElementById('late-search').value = '';
   document.getElementById('late-member-list').style.display = 'none';
   document.getElementById('late-member-list').innerHTML = '';
   document.getElementById('late-create-section').style.display = 'none';
   document.getElementById('late-first').value = '';
   document.getElementById('late-last').value = '';
+  document.getElementById('late-first').style.borderColor = '';
+  document.getElementById('late-last').style.borderColor = '';
   const mr = document.getElementById('late-is-member');
   if (mr) mr.checked = true;
   document.getElementById('late-modal').classList.add('open');
-  renderLateMemberList();
 }
 
 function closeLateModal() {
