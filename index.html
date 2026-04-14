@@ -2054,7 +2054,11 @@ function shooterScoreCard(s) {
   return `<div class="shooter-score-card" id="scard-${s.id}" style="border-left-color:${s.isVisitor ? '#888' : s.isRO ? '#c9861a' : 'var(--accent2)'}">
     <div class="scard-header">
       <div>
-        <div class="scard-name">${s.firstName} ${s.lastName} ${roBadge} ${visBadge}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span onclick="removeShooter('${s.id}')" title="Remove shooter"
+            style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(200,55,45,0.15);color:var(--accent);font-size:13px;cursor:pointer;flex-shrink:0;font-weight:700;line-height:1">✕</span>
+          <div class="scard-name">${s.firstName} ${s.lastName} ${roBadge} ${visBadge}</div>
+        </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:4px;color:white;font-size:12px;cursor:pointer;margin:0;text-transform:none;letter-spacing:0">
