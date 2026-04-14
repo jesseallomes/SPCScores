@@ -2396,15 +2396,27 @@ function openPistolModal(sid) {
     const borrowedPistols = (allMembers[shooter.memberId].borrowedPistols || []);
     if (borrowedPistols.length) {
       prevEl.style.display = 'block';
-      prevEl.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:6px">Previously Borrowed</div>' +
-        borrowedPistols.map(function(p, i) {
+      prevEl.innerHTML = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:6px">Previously Borrowed</div>';
+        borrowedPistols.forEach(function(p, i) {
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin:3px';
           const btn = document.createElement('button');
           btn.className = 'btn btn-outline btn-sm';
-          btn.style.cssText = 'margin:3px;text-transform:none;letter-spacing:0;border-color:var(--gold);color:var(--gold)';
+          btn.style.cssText = 'text-transform:none;letter-spacing:0;border-color:var(--gold);color:var(--gold);margin:0';
           btn.textContent = (p.make||'—') + ' · ' + p.calibre + ' · ' + (p.type==='R'?'Rev':'Pis') + ' · ' + p.cls;
-          btn.onclick = function(){ selectBorrowedPistol(sid, i); };
-          return btn.outerHTML;
-        }).join('');
+          btn.onclick = (function(idx){ return function(){ selectBorrowedPistol(sid, idx); }; })(i);
+          const xBtn = document.createElement('button');
+          xBtn.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:14px;line-height:1;padding:0 2px;font-weight:700';
+          xBtn.textContent = '✕';
+          xBtn.title = 'Remove from list';
+          xBtn.onclick = (function(mid, idx, sid){ return function(e){
+            e.stopPropagation();
+            removeBorrowedPistol(mid, idx).then(function(){ openPistolModal(sid); });
+          }; })(shooter.memberId, i, sid);
+          wrap.appendChild(btn);
+          wrap.appendChild(xBtn);
+          prevEl.appendChild(wrap);
+        });
     } else {
       prevEl.style.display = 'none';
     }
@@ -2413,6 +2425,16 @@ function openPistolModal(sid) {
   }
 
   document.getElementById('pistol-modal').classList.add('open');
+}
+
+async function removeBorrowedPistol(mid, idx) {
+  const m = allMembers[mid];
+  if (!m) return;
+  const borrowed = m.borrowedPistols || [];
+  borrowed.splice(idx, 1);
+  m.borrowedPistols = borrowed;
+  allMembers[mid] = m;
+  if (db && isFirebaseReady) await db.ref('members/' + mid + '/borrowedPistols').set(borrowed.length ? borrowed : null);
 }
 
 function selectBorrowedPistol(sid, idx) {
