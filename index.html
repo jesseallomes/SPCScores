@@ -4682,6 +4682,16 @@ async function installPWA() {
 }
 
 // Hide banner if already installed
+function removeShooter(sid) {
+  if (!confirm('Remove this shooter from tonight\'s session?')) return;
+  S.shooters = S.shooters.filter(s => s.id !== sid);
+  delete S.scores[sid];
+  delete S.attendance[sid];
+  syncToFirebase();
+  renderScoreCards();
+  toast('Shooter removed', 'success');
+}
+
 window.addEventListener('appinstalled', () => {
   document.getElementById('pwa-install-banner')?.remove();
   toast('SPC Scorer installed to home screen!', 'success');
