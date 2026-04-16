@@ -1003,6 +1003,15 @@ table.rtable tr:hover td { background: #fafaf8; }
     <!-- History sub-page -->
     <div id="admin-tab-history" class="admin-sub-page">
       <div class="section-head">📁 Competition History</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:8px">↺ Restore Session from Share Link</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" id="restore-share-input" placeholder="Paste share URL or share key (e.g. share_abc123)"
+            style="flex:1;min-width:180px;margin-bottom:0;font-size:13px">
+          <button class="btn btn-blue btn-sm" onclick="restoreSessionFromShare()">Restore</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Restores a deleted session from its share snapshot. The restored session will appear in history.</div>
+      </div>
       <div id="admin-history-list"></div>
     </div>
 
@@ -1050,9 +1059,10 @@ table.rtable tr:hover td { background: #fafaf8; }
     <!-- Members/Shooters sub-page -->
     <div id="admin-tab-members" class="admin-sub-page" style="display:none">
       <div class="section-head">👥 Regular Shooters & Visitors</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
         <button class="btn btn-red btn-sm" onclick="openMemberModal(null)">+ Add Member</button>
         <button class="btn btn-outline btn-sm" onclick="loadMembersList()">↻ Refresh</button>
+        <button class="btn btn-outline btn-sm" onclick="syncAllNamesToHistory()" style="border-color:var(--accent2);color:var(--accent2)" title="Update names in all historical sessions and share links to match current member profiles">↺ Sync Names to History</button>
       </div>
       <div id="members-list-content"></div>
     </div>
@@ -2100,6 +2110,83 @@ async function confirmAddMember() {
   closeAddMemberModal();
   renderMemberTicklist();
   await loadMembersList();
+}
+
+// ====================================================
+// SYNC ALL NAMES — backfill historical sessions + shares
+// ====================================================
+async function syncAllNamesToHistory() {
+  if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+  if (!Object.keys(allMembers).length) { toast('No members loaded — open Shooters tab first', 'error'); return; }
+
+  if (!confirm('This will update shooter names in ALL historical sessions and share links to match the current member profiles.\n\nProceed?')) return;
+
+  try {
+    toast('Syncing…', 'success');
+    const [sessionsSnap, sharesSnap] = await Promise.all([
+      db.ref('sessions').once('value'),
+      db.ref('shares').once('value')
+    ]);
+
+    const writes = [];
+
+    const applyNames = (shooters) => {
+      let changed = false;
+      const updated = (shooters || []).map(s => {
+        if (!s.memberId) return s;
+        const m = allMembers[s.memberId];
+        if (!m) return s;
+        if (s.firstName === m.firstName && s.lastName === m.lastName && s.isRO === (m.isRO||false)) return s;
+        changed = true;
+        return { ...s, firstName: m.firstName, lastName: m.lastName, isRO: m.isRO||false };
+      });
+      return { updated, changed };
+    };
+
+    // Sessions
+    const allSessions = sessionsSnap.val() || {};
+    Object.entries(allSessions).forEach(([key, session]) => {
+      const { updated, changed } = applyNames(session.shooters);
+      if (changed) writes.push(db.ref(`sessions/${key}/shooters`).set(updated));
+    });
+
+    // Share snapshots
+    const allShares = sharesSnap.val() || {};
+    Object.entries(allShares).forEach(([key, share]) => {
+      const { updated, changed } = applyNames(share.shooters);
+      if (changed) writes.push(db.ref(`shares/${key}/shooters`).set(updated));
+    });
+
+    // Also update current in-memory session
+    let currentChanged = false;
+    S.shooters.forEach(s => {
+      if (!s.memberId) return;
+      const m = allMembers[s.memberId];
+      if (!m) return;
+      if (s.firstName !== m.firstName || s.lastName !== m.lastName || s.isRO !== (m.isRO||false)) {
+        s.firstName = m.firstName;
+        s.lastName  = m.lastName;
+        s.isRO      = m.isRO||false;
+        currentChanged = true;
+      }
+    });
+    if (currentChanged) syncToFirebase();
+
+    if (writes.length) {
+      await Promise.all(writes);
+      toast(`Done — updated ${writes.length} record(s)`, 'success');
+    } else {
+      toast('All records already up to date', 'success');
+    }
+
+    const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
+    if (activePage === 'scores') renderScoreCards();
+    if (activePage === 'results') renderResults();
+
+  } catch(e) {
+    console.error('Sync failed:', e);
+    toast('Sync failed: ' + e.message, 'error');
+  }
 }
 
 // ====================================================
@@ -4763,6 +4850,66 @@ function listenSession() {
 // ====================================================
 // HISTORY
 // ====================================================
+async function restoreSessionFromShare() {
+  if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+
+  const raw = (document.getElementById('restore-share-input')?.value || '').trim();
+  if (!raw) { toast('Paste a share URL or key first', 'error'); return; }
+
+  // Accept full URL or bare key
+  let shareKey = raw;
+  const urlMatch = raw.match(/[?&]share=(share_[a-zA-Z0-9]+)/);
+  if (urlMatch) shareKey = urlMatch[1];
+  if (!shareKey.startsWith('share_')) { toast('Could not find a share key in that input', 'error'); return; }
+
+  try {
+    const snap = await db.ref('shares/' + shareKey).once('value');
+    const data = snap.val();
+    if (!data) { toast('Share not found — it may have been deleted', 'error'); return; }
+
+    // Build a session key from date + title
+    const date  = data.date  || new Date().toISOString().split('T')[0];
+    const title = data.title || 'Restored Session';
+    const baseKey = (date + '-' + title).replace(/[^a-zA-Z0-9-]/g, '_');
+
+    // Check if a session with this key already exists
+    const existing = await db.ref('sessions/' + baseKey).once('value');
+    let sessionKey = baseKey;
+    if (existing.val()) {
+      // Append timestamp to avoid collision
+      sessionKey = baseKey + '_restored_' + Date.now();
+    }
+
+    // Write restored session
+    const restored = {
+      meta: {
+        date,
+        title,
+        steel:   data.steel  || {},
+        paper:   data.paper  || {},
+        ro:      data.ro     || '',
+        emailTo: data.emailTo || '',
+        savedAt: data.created || Date.now(),
+        restoredFrom: shareKey,
+        updated: Date.now()
+      },
+      shooters:   data.shooters   || [],
+      scores:     data.scores     || {},
+      attendance: data.attendance || {}
+    };
+
+    await db.ref('sessions/' + sessionKey).set(restored);
+
+    document.getElementById('restore-share-input').value = '';
+    toast('Session restored — it will now appear in history', 'success');
+    loadHistory();
+
+  } catch(e) {
+    console.error('Restore failed:', e);
+    toast('Restore failed: ' + e.message, 'error');
+  }
+}
+
 async function loadHistory() {
   // Target admin panel history list (not the old standalone page)
   const el = document.getElementById('admin-history-list') || document.getElementById('history-list');
