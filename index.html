@@ -321,6 +321,10 @@ input:focus, select:focus {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 6px;
+  position: sticky;
+  top: 98px;
+  z-index: 10;
+  border-radius: 0;
 }
 
 .scard-name {
@@ -1188,8 +1192,9 @@ table.rtable tr:hover td { background: #fafaf8; }
 <!-- PISTOL MODAL -->
 <div class="modal-overlay" id="pistol-modal">
   <div class="modal">
-    <h3>Add Pistol Entry</h3>
+    <h3 id="pistol-modal-title">Add Pistol Entry</h3>
     <input type="hidden" id="pistol-modal-shooter-id">
+    <input type="hidden" id="pm-edit-pi" value="">
     <div id="pm-prev-pistols" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:12px"></div>
     <div class="row2">
       <div>
@@ -1380,34 +1385,48 @@ try {
 const PISTOL_MAKES_SEED = ["Glock", "Smith & Wesson", "S&W", "Sig Sauer", "SIG", "Ruger", "Springfield Armory", "Springfield", "Beretta", "Colt", "Heckler & Koch", "H&K", "HK", "CZ", "Walther", "Taurus", "Kimber", "FN Herstal", "FN", "FNH", "Remington", "Mossberg", "Browning", "Magnum Research", "Desert Eagle", "Kahr Arms", "Kahr", "Kel-Tec", "Diamondback", "Caracal", "Canik", "SAR Arms", "SAR", "Arex", "Staccato", "Nighthawk Custom", "Nighthawk", "Wilson Combat", "Les Baer", "Ed Brown", "Dan Wesson", "Rock Island Armory", "Rock Island", "RIA", "Tisas", "Tristar", "EAA", "European American Armory", "Grand Power", "Girsan", "Zastava", "Sarsilmaz", "Stoeger", "IWI", "Israel Weapon Industries", "Jericho", "Tanfoglio", "Pardini", "Morini", "Feinwerkbau", "FWB", "Steyr", "Steyr Arms", "Hammerli", "Anschütz", "Walther", "Benelli", "Pietro Beretta", "Chiappa", "Llama", "Star", "Astra", "Rohm", "Amadeo Rossi", "Rossi", "Charter Arms", "Taurus", "Heritage", "North American Arms", "NAA", "Bond Arms", "Derringer", "American Derringer", "Coonan", "Coonan Arms", "Bul Armory", "Bul", "Sphinx", "B&T", "Brügger & Thomet", "Arsenal", "Zastava Arms", "HS Produkt", "HS", "Caracal International", "Kriss", "Kriss USA", "Standard Manufacturing", "Sccy", "SCCY Industries", "Tippmann", "Auto-Ordnance", "Thompson", "Luger", "Dreyse", "Webley", "Enfield", "Nagant", "Tokarev", "Makarov", "Stechkin", "OTs", "MP-443", "Grach", "Umarex", "Air Arms", "Weihrauch", "Crosman", "Daisy", "Diana", "Gamo"];
 
 let pistolMakes = [];
+let pistolMakeCounts = {}; // make.toLowerCase() -> count
 
 async function initPistolMakes() {
   if (!db || !isFirebaseReady) return;
   const snap = await db.ref('config/pistolMakes').once('value');
   const stored = snap.val();
   if (!stored || !stored.length) {
-    // Seed with default list
     pistolMakes = [...PISTOL_MAKES_SEED];
     await db.ref('config/pistolMakes').set(pistolMakes);
   } else {
     pistolMakes = stored;
   }
+  const countSnap = await db.ref('config/pistolMakeCounts').once('value');
+  pistolMakeCounts = countSnap.val() || {};
   updatePistolMakesDatalist();
 }
 
 function updatePistolMakesDatalist() {
   const dl = document.getElementById('pistol-makes-list');
   if (!dl) return;
-  dl.innerHTML = pistolMakes.map(m => '<option value="' + m + '">').join('');
+  // Sort: most-used first, then alphabetical for ties
+  const sorted = [...pistolMakes].sort((a, b) => {
+    const ca = pistolMakeCounts[a.toLowerCase()] || 0;
+    const cb = pistolMakeCounts[b.toLowerCase()] || 0;
+    if (cb !== ca) return cb - ca;
+    return a.localeCompare(b);
+  });
+  dl.innerHTML = sorted.map(m => '<option value="' + m + '">').join('');
 }
 
 async function savePistolMake(make) {
   if (!make || !make.trim()) return;
   const trimmed = make.trim();
-  if (pistolMakes.some(m => m.toLowerCase() === trimmed.toLowerCase())) return;
-  pistolMakes.push(trimmed);
-  pistolMakes.sort((a,b) => a.localeCompare(b));
-  if (db && isFirebaseReady) await db.ref('config/pistolMakes').set(pistolMakes);
+  const key = trimmed.toLowerCase();
+  // Increment usage count
+  pistolMakeCounts[key] = (pistolMakeCounts[key] || 0) + 1;
+  if (db && isFirebaseReady) db.ref('config/pistolMakeCounts/' + key).set(pistolMakeCounts[key]);
+  // Add to list if new
+  if (!pistolMakes.some(m => m.toLowerCase() === key)) {
+    pistolMakes.push(trimmed);
+    if (db && isFirebaseReady) await db.ref('config/pistolMakes').set(pistolMakes);
+  }
   updatePistolMakesDatalist();
 }
 
@@ -1860,13 +1879,12 @@ function confirmShooters() {
     added++;
   });
 
-  // 2. Add manually entered rows
+  // 2. Add manually entered rows (legacy path)
   document.querySelectorAll('#name-entry-list .shooter-entry-row').forEach(row => {
     const inputs = row.querySelectorAll('input[type=text]');
     const first = (inputs[0]?.value||'').trim();
     const last = (inputs[1]?.value||'').trim();
     if (!first || !last) {
-      // Highlight missing fields
       if (!first && inputs[0]) inputs[0].style.borderColor = 'var(--accent)';
       if (!last && inputs[1]) inputs[1].style.borderColor = 'var(--accent)';
       return;
@@ -1887,6 +1905,22 @@ function confirmShooters() {
     added++;
   });
 
+  // 3. Add pending new shooters (added via "Not in list" → confirmNewShooterRow)
+  (window._pendingNewShooters || []).forEach(p => {
+    if (S.shooters.find(s => s.firstName===p.firstName && s.lastName===p.lastName)) return;
+    const shooter = {
+      id: newId(), memberId: null,
+      firstName: p.firstName, lastName: p.lastName,
+      pistols: [], isRO: p.isRO||false, isVisitor: p.isVisitor||false,
+      optOutPistols: p.optOutPistols||false
+    };
+    S.shooters.push(shooter);
+    S.scores[shooter.id] = {};
+    S.attendance[shooter.id] = { c1:false, c2:false, c3:false, c4:false };
+    added++;
+  });
+  window._pendingNewShooters = [];
+
   // Save new non-visitor shooters and visitors to members list
   for (const shooter of S.shooters) {
     if (!shooter.memberId) {
@@ -1895,17 +1929,19 @@ function confirmShooters() {
       const member = {
         id: mid, firstName: shooter.firstName, lastName: shooter.lastName,
         isRO: shooter.isRO||false, isVisitor: shooter.isVisitor||false,
-        optOutPistols: false, pistols: []
+        optOutPistols: shooter.optOutPistols||false, pistols: []
       };
       allMembers[mid] = member;
       if (db && isFirebaseReady) db.ref(`members/${mid}`).set(member);
     }
   }
 
-  // Clear manual rows, reset ticklist
+  // Clear manual rows, chips, reset ticklist
   document.getElementById('name-entry-list').innerHTML = '';
   nameRows = [];
   selectedMemberIds = new Set();
+  const chipsEl = document.getElementById('selected-chips');
+  if (chipsEl) chipsEl.innerHTML = '';
   syncToFirebase();
   toast(added > 0 ? `${added} shooter(s) confirmed` : 'No new shooters added', 'success');
   nav('scores');
@@ -1970,7 +2006,6 @@ async function confirmAddMember() {
   const wasOptedOut = existing.optOutPistols || false;
   if (optOutPistols && !wasOptedOut && (existing.pistols||[]).length > 0) {
     if (!confirm('This will permanently delete all saved pistol details for ' + first + ' ' + last + '.\n\nDo you want to proceed?')) {
-      // Revert checkbox
       const optEl = document.getElementById('am-optout');
       if (optEl) optEl.checked = false;
       return;
@@ -1980,10 +2015,91 @@ async function confirmAddMember() {
   const member = { ...existing, id: mid, firstName: first, lastName: last, isRO, optOutPistols, pistols };
   allMembers[mid] = member;
   if (db && isFirebaseReady) await db.ref(`members/${mid}`).set(member);
+
+  // If this is an edit and name/isRO changed, propagate to current session + all historical sessions
+  const nameChanged = existingId && (
+    (existing.firstName || '') !== first ||
+    (existing.lastName  || '') !== last  ||
+    (existing.isRO      || false) !== isRO
+  );
+  if (nameChanged) {
+    // 1. Update current in-memory session
+    let currentSessionUpdated = false;
+    S.shooters.forEach(s => {
+      if (s.memberId === mid) {
+        s.firstName = first;
+        s.lastName  = last;
+        s.isRO      = isRO;
+        currentSessionUpdated = true;
+      }
+    });
+    if (currentSessionUpdated) {
+      syncToFirebase();
+      const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
+      if (activePage === 'scores') renderScoreCards();
+      if (activePage === 'results') renderResults();
+    }
+
+    // 2. Propagate to all historical sessions AND share snapshots in Firebase
+    if (db && isFirebaseReady) {
+      try {
+        const [sessionsSnap, sharesSnap] = await Promise.all([
+          db.ref('sessions').once('value'),
+          db.ref('shares').once('value')
+        ]);
+
+        const writes = [];
+
+        // Sessions
+        const allSessions = sessionsSnap.val() || {};
+        Object.entries(allSessions).forEach(([key, session]) => {
+          if (!session.shooters) return;
+          let changed = false;
+          const updatedShooters = session.shooters.map(s => {
+            if (s.memberId === mid) {
+              changed = true;
+              return { ...s, firstName: first, lastName: last, isRO };
+            }
+            return s;
+          });
+          if (changed) writes.push(db.ref(`sessions/${key}/shooters`).set(updatedShooters));
+        });
+
+        // Share snapshots
+        const allShares = sharesSnap.val() || {};
+        Object.entries(allShares).forEach(([key, share]) => {
+          if (!share.shooters) return;
+          let changed = false;
+          const updatedShooters = share.shooters.map(s => {
+            if (s.memberId === mid) {
+              changed = true;
+              return { ...s, firstName: first, lastName: last, isRO };
+            }
+            return s;
+          });
+          if (changed) writes.push(db.ref(`shares/${key}/shooters`).set(updatedShooters));
+        });
+
+        if (writes.length) {
+          await Promise.all(writes);
+          toast(`${first} ${last} saved — name updated across all records`, 'success');
+        } else {
+          toast(`${first} ${last} saved`, 'success');
+        }
+      } catch(e) {
+        console.warn('Historical propagation failed:', e);
+        toast(`${first} ${last} saved (propagation failed)`, 'success');
+      }
+    } else {
+      toast(`${first} ${last} saved`, 'success');
+    }
+  } else {
+    toast(`${first} ${last} saved`, 'success');
+  }
+
   closeAddMemberModal();
   renderMemberTicklist();
   await loadMembersList();
-  toast(`${first} ${last} saved`, 'success');
 }
 
 // ====================================================
@@ -2043,6 +2159,7 @@ function renderScoreCards() {
   }
 
   list.innerHTML = S.shooters.map(s => shooterScoreCard(s)).join('');
+  wireScoreInputs();
 }
 
 function shooterScoreCard(s) {
@@ -2124,15 +2241,17 @@ function pistolScoreEntry(s, p, pi) {
           <div style="display:flex;gap:3px;margin-top:3px;align-items:center">
             ${hasMiss ? `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
               <span style="font-size:8px;color:var(--muted);font-family:'Roboto Mono',monospace">MISS</span>
-              <input type="number" min="0" max="99" placeholder="0" value="${pMiss}"
-                inputmode="numeric" pattern="[0-9]*" enterkeyhint="next"
+              <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${pMiss}"
+                enterkeyhint="next"
+                data-type="steel-pen" data-sid="${s.id}" data-pi="${pi}" data-key="s${stg}_r${r}_miss"
                 style="width:38px;text-align:center;margin:0;padding:3px 2px;font-family:'Roboto Mono',monospace;font-weight:700;font-size:13px;border:1.5px solid var(--border);border-radius:4px"
                 oninput="savePenalty('${s.id}',${pi},'s${stg}_r${r}_miss',this.value)">
             </div>` : ''}
             ${hasOOS ? `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
               <span style="font-size:8px;color:var(--muted);font-family:'Roboto Mono',monospace">OOS</span>
-              <input type="number" min="0" max="99" placeholder="0" value="${pOOS}"
-                inputmode="numeric" pattern="[0-9]*" enterkeyhint="next"
+              <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${pOOS}"
+                enterkeyhint="next"
+                data-type="steel-pen" data-sid="${s.id}" data-pi="${pi}" data-key="s${stg}_r${r}_oos"
                 style="width:38px;text-align:center;margin:0;padding:3px 2px;font-family:'Roboto Mono',monospace;font-weight:700;font-size:13px;border:1.5px solid var(--border);border-radius:4px"
                 oninput="savePenalty('${s.id}',${pi},'s${stg}_r${r}_oos',this.value)">
             </div>` : ''}
@@ -2142,9 +2261,10 @@ function pistolScoreEntry(s, p, pi) {
 
         return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
           <div class="zone-lbl" style="font-size:10px">${label}</div>
-          <input type="number" step="0.01" min="0" placeholder="0.00"
+          <input type="text" inputmode="decimal" placeholder="0.00"
             value="${val}" style="width:78px;text-align:center"
-            inputmode="decimal" enterkeyhint="next"
+            enterkeyhint="next" autocomplete="off"
+            data-type="steel-time" data-sid="${s.id}" data-pi="${pi}" data-key="s${stg}_r${r}"
             oninput="saveScore('${s.id}',${pi},'steel','s${stg}_r${r}',this.value)">
           ${penBoxes}
         </div>`;
@@ -2159,15 +2279,17 @@ function pistolScoreEntry(s, p, pi) {
           <span style="font-size:11px;font-weight:700;color:var(--accent);font-family:'Roboto Mono',monospace">PENALTIES</span>
           ${hasMiss ? `<div style="display:flex;align-items:center;gap:4px">
             <span style="font-size:11px;color:var(--muted)">Miss</span>
-            <input type="number" min="0" max="99" placeholder="0" value="${pMiss}"
-              inputmode="numeric" enterkeyhint="next"
+            <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${pMiss}"
+              enterkeyhint="next"
+              data-type="steel-pen" data-sid="${s.id}" data-pi="${pi}" data-key="s${stg}_r0_miss"
               style="width:48px;text-align:center;margin:0;padding:4px;font-family:'Roboto Mono',monospace;font-weight:700"
               oninput="savePenalty('${s.id}',${pi},'s${stg}_r0_miss',this.value)">
           </div>` : ''}
           ${hasOOS ? `<div style="display:flex;align-items:center;gap:4px">
             <span style="font-size:11px;color:var(--muted)">OOS</span>
-            <input type="number" min="0" max="99" placeholder="0" value="${pOOS}"
-              inputmode="numeric" enterkeyhint="next"
+            <input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${pOOS}"
+              enterkeyhint="next"
+              data-type="steel-pen" data-sid="${s.id}" data-pi="${pi}" data-key="s${stg}_r0_oos"
               style="width:48px;text-align:center;margin:0;padding:4px;font-family:'Roboto Mono',monospace;font-weight:700"
               oninput="savePenalty('${s.id}',${pi},'s${stg}_r0_oos',this.value)">
           </div>` : ''}
@@ -2199,6 +2321,7 @@ function pistolScoreEntry(s, p, pi) {
         <input type="text" inputmode="numeric" pattern="[0-9]*"
           placeholder="0" value="${val}"
           enterkeyhint="next" autocomplete="off"
+          data-type="paper-zone" data-sid="${s.id}" data-pi="${pi}" data-zone="${z}"
           oninput="saveScore('${s.id}',${pi},'paper','z${z}',this.value)">
       </div>`;
     }).join('');
@@ -2213,14 +2336,20 @@ function pistolScoreEntry(s, p, pi) {
   }
 
   return `<div class="pistol-entry" id="pe-${s.id}-${pi}">
-    <div class="pistol-entry-header">
-      <div>
+    <div class="pistol-entry-header" style="cursor:pointer" onclick="togglePistolCollapse('${s.id}',${pi})">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+        <span id="pe-chevron-${s.id}-${pi}" style="font-size:12px;color:var(--muted);flex-shrink:0">${window._pistolCollapsed && window._pistolCollapsed['${s.id}-${pi}'] ? '▶' : '▼'}</span>
         <span class="pistol-label">${p.make || 'Pistol'} (${p.type === 'R' ? 'Revolver' : 'Pistol'})  </span>
         <span class="pill ${catInfo.cls}">${catInfo.label}</span>
       </div>
-      <button class="btn btn-xs btn-outline" style="color:var(--accent);border-color:var(--accent)" onclick="removePistol('${s.id}',${pi})">Remove</button>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn btn-xs btn-outline" style="color:var(--accent2);border-color:var(--accent2)" onclick="event.stopPropagation();openEditPistolModal('${s.id}',${pi})">Edit</button>
+        <button class="btn btn-xs btn-outline" style="color:var(--accent);border-color:var(--accent);flex-shrink:0" onclick="event.stopPropagation();removePistol('${s.id}',${pi})">Remove</button>
+      </div>
     </div>
-    ${steelHtml}${paperHtml}
+    <div id="pe-body-${s.id}-${pi}" style="display:${window._pistolCollapsed && window._pistolCollapsed['${s.id}-${pi}'] ? 'none' : 'block'}">
+      ${steelHtml}${paperHtml}
+    </div>
   </div>`;
 }
 
@@ -2372,6 +2501,8 @@ function setPistolOwnership(mode) {
 
 function openPistolModal(sid) {
   document.getElementById('pistol-modal-shooter-id').value = sid;
+  document.getElementById('pm-edit-pi').value = '';
+  document.getElementById('pistol-modal-title').textContent = 'Add Pistol Entry';
   document.getElementById('pm-make').value = '';
   document.getElementById('pm-type').value = 'P';
   document.getElementById('pm-calibre').value = '.22';
@@ -2431,6 +2562,50 @@ function openPistolModal(sid) {
   document.getElementById('pistol-modal').classList.add('open');
 }
 
+function openEditPistolModal(sid, pi) {
+  const shooter = S.shooters.find(s => s.id === sid);
+  if (!shooter) return;
+  const p = (shooter.pistols || [])[pi];
+  if (!p) return;
+
+  document.getElementById('pistol-modal-shooter-id').value = sid;
+  document.getElementById('pm-edit-pi').value = String(pi);
+  document.getElementById('pistol-modal-title').textContent = 'Edit Pistol';
+  document.getElementById('pm-make').value = p.make || '';
+
+  // Type
+  const typeEl = document.getElementById('pm-type');
+  if (typeEl) typeEl.value = p.type || 'P';
+
+  // Calibre — check if it's in the standard list or "other"
+  const calEl = document.getElementById('pm-calibre');
+  const otherEl = document.getElementById('pm-calibre-other');
+  const otherWrap = document.getElementById('pm-other-wrap');
+  const stdCals = Array.from(calEl.options).map(o => o.value);
+  if (stdCals.includes(p.calibre)) {
+    calEl.value = p.calibre;
+    if (otherWrap) otherWrap.style.display = 'none';
+  } else {
+    calEl.value = 'other';
+    if (otherEl) otherEl.value = p.calibre || '';
+    if (otherWrap) otherWrap.style.display = 'block';
+  }
+
+  document.getElementById('pm-class').value = p.cls || 'S';
+
+  // Ownership buttons — hide in edit mode (can't change borrowed status after the fact)
+  const ownsBtn = document.getElementById('pm-owns-btn');
+  const borrowedBtn = document.getElementById('pm-borrowed-btn');
+  if (ownsBtn) ownsBtn.style.display = 'none';
+  if (borrowedBtn) borrowedBtn.style.display = 'none';
+
+  // Hide prev pistols section
+  const prevEl = document.getElementById('pm-prev-pistols');
+  if (prevEl) prevEl.style.display = 'none';
+
+  document.getElementById('pistol-modal').classList.add('open');
+}
+
 async function removeBorrowedPistol(mid, idx) {
   const m = allMembers[mid];
   if (!m) return;
@@ -2473,10 +2648,49 @@ document.getElementById('pm-calibre').addEventListener('change', function() {
 
 function closePistolModal() {
   document.getElementById('pistol-modal').classList.remove('open');
+  document.getElementById('pm-edit-pi').value = '';
+  document.getElementById('pistol-modal-title').textContent = 'Add Pistol Entry';
+  // Restore ownership buttons (may have been hidden in edit mode)
+  const ownsBtn = document.getElementById('pm-owns-btn');
+  const borrowedBtn = document.getElementById('pm-borrowed-btn');
+  if (ownsBtn) ownsBtn.style.display = '';
+  if (borrowedBtn) borrowedBtn.style.display = '';
 }
 
 function confirmAddPistol() {
   const rawSid = document.getElementById('pistol-modal-shooter-id').value;
+  const editPi = document.getElementById('pm-edit-pi').value;
+
+  // EDIT MODE: update existing pistol in-place
+  if (editPi !== '') {
+    const pi = parseInt(editPi);
+    const shooter = S.shooters.find(s => s.id === rawSid);
+    if (!shooter || !shooter.pistols[pi]) { closePistolModal(); return; }
+    let cal = document.getElementById('pm-calibre').value;
+    if (cal === 'other') cal = document.getElementById('pm-calibre-other').value.trim() || 'Other';
+    const make = document.getElementById('pm-make').value.trim();
+    const cls = document.getElementById('pm-class').value;
+    const type = document.getElementById('pm-type').value;
+    savePistolMake(make);
+    // Update the pistol object in session
+    shooter.pistols[pi] = { ...shooter.pistols[pi], make, calibre: cal, cls, type };
+    // Update in member profile too if stored
+    const memberRec = shooter.memberId ? allMembers[shooter.memberId] : null;
+    if (memberRec && !shooter.isVisitor && !memberRec.optOutPistols && memberRec.pistols) {
+      // Try to find matching old pistol by index position or exact match and update
+      if (memberRec.pistols[pi]) {
+        memberRec.pistols[pi] = { ...memberRec.pistols[pi], make, calibre: cal, cls, type };
+        if (db && isFirebaseReady) db.ref(`members/${shooter.memberId}/pistols`).set(memberRec.pistols);
+      }
+    }
+    // Recalc attendance in case calibre changed
+    recalcAttendanceFromPistols();
+    closePistolModal();
+    syncToFirebase();
+    reRenderShooterCard(rawSid);
+    toast('Pistol updated', 'success');
+    return;
+  }
 
   // Handle adding pistol directly to a member profile (from Members page)
   if (rawSid.startsWith('MEMBER:')) {
@@ -2586,6 +2800,110 @@ function filterScoreCards(query) {
   });
 }
 
+// Returns all score inputs in DOM order for tab/next navigation
+function getAllScoreInputs() {
+  return Array.from(document.querySelectorAll(
+    '#score-cards-list input[data-type="steel-time"],' +
+    '#score-cards-list input[data-type="steel-pen"],' +
+    '#score-cards-list input[data-type="paper-zone"]'
+  ));
+}
+
+function focusNextScoreInput(current) {
+  const all = getAllScoreInputs();
+  const idx = all.indexOf(current);
+  if (idx >= 0 && idx < all.length - 1) {
+    all[idx + 1].focus();
+    all[idx + 1].select();
+  }
+}
+
+function focusPrevScoreInput(current) {
+  const all = getAllScoreInputs();
+  const idx = all.indexOf(current);
+  if (idx > 0) {
+    all[idx - 1].focus();
+    all[idx - 1].select();
+  }
+}
+
+function wireScoreInputs() {
+  // Paper zone inputs: advance after 1 digit, back on backspace-when-empty
+  document.querySelectorAll('#score-cards-list input[data-type="paper-zone"]').forEach(function(inp) {
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Backspace' && this.value === '') {
+        e.preventDefault();
+        focusPrevScoreInput(this);
+      }
+      if (e.key === 'Enter' || e.key === 'Next') {
+        e.preventDefault();
+        focusNextScoreInput(this);
+      }
+    });
+    inp.addEventListener('input', function() {
+      // Strip non-digits
+      this.value = this.value.replace(/[^0-9]/g, '');
+      if (this.value.length >= 1) {
+        focusNextScoreInput(this);
+      }
+    });
+  });
+
+  // Steel time inputs: advance after valid ##.## pattern (5+ chars with decimal), or Enter
+  document.querySelectorAll('#score-cards-list input[data-type="steel-time"]').forEach(function(inp) {
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Backspace' && this.value === '') {
+        e.preventDefault();
+        focusPrevScoreInput(this);
+      }
+      if (e.key === 'Enter' || e.key === 'Next') {
+        e.preventDefault();
+        focusNextScoreInput(this);
+      }
+      // Only allow digits, dot, backspace, arrows, tab, delete
+      if (!/^[0-9.]$/.test(e.key) &&
+          !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Enter','Next'].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+    inp.addEventListener('input', function() {
+      // Strip anything that isn't digit or dot; ensure at most one dot
+      let v = this.value.replace(/[^0-9.]/g, '');
+      const parts = v.split('.');
+      if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('');
+      // Limit to 2 decimal places
+      if (parts[1] !== undefined && parts[1].length > 2) {
+        v = parts[0] + '.' + parts[1].slice(0, 2);
+      }
+      if (this.value !== v) this.value = v;
+      // Auto-advance: value has digits, a dot, and exactly 2 decimal digits
+      if (/^\d+\.\d{2}$/.test(v)) {
+        focusNextScoreInput(this);
+      }
+    });
+  });
+
+  // Steel penalty inputs: advance after 2 digits, back on backspace-when-empty
+  document.querySelectorAll('#score-cards-list input[data-type="steel-pen"]').forEach(function(inp) {
+    inp.addEventListener('keydown', function(e) {
+      if (e.key === 'Backspace' && this.value === '') {
+        e.preventDefault();
+        focusPrevScoreInput(this);
+      }
+      if (e.key === 'Enter' || e.key === 'Next') {
+        e.preventDefault();
+        focusNextScoreInput(this);
+      }
+    });
+    inp.addEventListener('input', function() {
+      this.value = this.value.replace(/[^0-9]/g, '');
+      if (this.value.length >= 2) {
+        focusNextScoreInput(this);
+      }
+    });
+  });
+}
+
 function reRenderShooterCard(sid) {
   const shooter = S.shooters.find(s => s.id === sid);
   if (!shooter) return;
@@ -2594,6 +2912,22 @@ function reRenderShooterCard(sid) {
   const tmp = document.createElement('div');
   tmp.innerHTML = shooterScoreCard(shooter);
   card.replaceWith(tmp.firstChild);
+  wireScoreInputs();
+  // Re-apply any active filter so the card isn't shown when it shouldn't be
+  const q = document.getElementById('score-search')?.value || '';
+  if (q) filterScoreCards(q);
+}
+
+// Collapse state: keyed by "sid-pi", true = collapsed. Not persisted — resets on re-render.
+window._pistolCollapsed = window._pistolCollapsed || {};
+
+function togglePistolCollapse(sid, pi) {
+  const key = sid + '-' + pi;
+  window._pistolCollapsed[key] = !window._pistolCollapsed[key];
+  const body = document.getElementById('pe-body-' + sid + '-' + pi);
+  const chev = document.getElementById('pe-chevron-' + sid + '-' + pi);
+  if (body) body.style.display = window._pistolCollapsed[key] ? 'none' : 'block';
+  if (chev) chev.textContent = window._pistolCollapsed[key] ? '▶' : '▼';
 }
 
 function removePistol(sid, pi) {
@@ -3835,6 +4169,37 @@ function getCatInfo(calibre, cls, type, suffix) {
   return { label: `${calDisplay} ${cls}${suffixStr}`, cls: pillCls(calibre) };
 }
 
+// Returns a stable group key for the broad competition categories
+function getGroupKey(calibre, cls, type) {
+  const ssaa = calibreToClass(calibre);
+  if (ssaa === 'c1') return 'air';
+  if (ssaa === 'c2') return `rimfire_${cls}`;
+  if (ssaa === 'c3') return `cf38_${type}_${cls}`;
+  if (ssaa === 'c4') return `cf40_${type}_${cls}`;
+  return `other_${type}_${cls}`;
+}
+
+// Display label for each group key
+function getGroupLabel(groupKey) {
+  const map = {
+    'air':           'Air',
+    'rimfire_S':     'Rimfire — Standard',
+    'rimfire_M':     'Rimfire — Modified',
+    'cf38_P_S':      'Centrefire ≤.38 Pistol — Standard',
+    'cf38_P_M':      'Centrefire ≤.38 Pistol — Modified',
+    'cf38_R_S':      'Centrefire ≤.38 Revolver — Standard',
+    'cf38_R_M':      'Centrefire ≤.38 Revolver — Modified',
+    'cf40_P_S':      'Centrefire >.38 Pistol — Standard',
+    'cf40_P_M':      'Centrefire >.38 Pistol — Modified',
+    'cf40_R_S':      'Centrefire >.38 Revolver — Standard',
+    'cf40_R_M':      'Centrefire >.38 Revolver — Modified',
+  };
+  return map[groupKey] || groupKey;
+}
+
+// Sort order for group keys
+const GROUP_ORDER = ['air','rimfire_S','rimfire_M','cf38_P_S','cf38_P_M','cf38_R_S','cf38_R_M','cf40_P_S','cf40_P_M','cf40_R_S','cf40_R_M'];
+
 const ORDINALS = ['', '', '2nd', '3rd', '4th', '5th']; // index matches ordinal number
 
 // Map calibre to SSAA attendance class
@@ -3945,9 +4310,10 @@ function getAllEntries(type) {
         const baseCat = `${p.calibre}_${typeStr}_${p.cls}`;
         const ordinal = (shooterPistolOrdinals[s.id] || [])[pi] || 1;
         const suffix = ordinal > 1 ? (ORDINALS[ordinal] || `${ordinal}th`) : '';
-        // catKey groups ALL shooters' nth entries of this calibre/class together
-        const catKey = suffix ? `${baseCat}_${suffix}` : baseCat;
-        entries.push({ shooter: s, pistol: p, pi, score, catKey, ordinal,
+        // catKey uses broad group (Air / Rimfire S / CF≤.38 P S / etc.)
+        const groupKey = getGroupKey(p.calibre, p.cls, p.type);
+        const catKey = suffix ? `${groupKey}_${suffix}` : groupKey;
+        entries.push({ shooter: s, pistol: p, pi, score, catKey, ordinal, groupKey,
           catInfo: getCatInfo(p.calibre, p.cls, p.type, suffix) });
       }
     });
@@ -3987,20 +4353,30 @@ function buildResultSection(type, entries) {
     : `<th style="text-align:center">SCORE</th>`;
   const tableHeader = `<thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th>${runHeaders}</tr></thead>`;
 
-  // Overall top entries (all, sorted by score)
-  const overallRows = entries.map((e, i) => resultRow(e, i, isSteel, runs)).join('');
+  // Overall top 5 entries only (results page only — not spreadsheet)
+  const overallRows = entries.slice(0, 5).map((e, i) => resultRow(e, i, isSteel, runs)).join('');
 
-  // By category
-  const catSorted = sortedByCategory(entries);
+  // By category — grouped by broad competition category, sorted by GROUP_ORDER
   const groups = new Map();
-  catSorted.forEach(e => {
+  entries.forEach(e => {
     if (!groups.has(e.catKey)) groups.set(e.catKey, []);
     groups.get(e.catKey).push(e);
   });
 
+  // Sort groups by GROUP_ORDER, then alphabetically for unknowns
+  const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
+    const baseA = a.split('_2nd')[0].split('_3rd')[0].split('_4th')[0];
+    const baseB = b.split('_2nd')[0].split('_3rd')[0].split('_4th')[0];
+    const iA = GROUP_ORDER.indexOf(baseA);
+    const iB = GROUP_ORDER.indexOf(baseB);
+    if (iA !== iB) return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
+    return a.localeCompare(b);
+  });
+
   let catRows = '';
   let lastOrdinal = null;
-  groups.forEach((items, key) => {
+  sortedGroupKeys.forEach(key => {
+    const items = groups.get(key);
     const ordinal = items[0].ordinal || 1;
     if (ordinal !== lastOrdinal) {
       lastOrdinal = ordinal;
@@ -4011,12 +4387,15 @@ function buildResultSection(type, entries) {
     }
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
     const totalCols = isSteel ? runs + 5 : 5;
-    catRows += `<tr class="cat-row"><td colspan="${totalCols}">${items[0].catInfo.label}</td></tr>`;
+    // Use broad group label for heading; show individual pistol detail in per-row pill
+    const baseKey = key.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
+    const groupLabel = getGroupLabel(baseKey);
+    catRows += `<tr class="cat-row"><td colspan="${totalCols}">${groupLabel}</td></tr>`;
     sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel, runs); });
   });
 
   return `
-    <div class="results-section-title">${icon} ${name.toUpperCase()} - OVERALL</div>
+    <div class="results-section-title">${icon} ${name.toUpperCase()} - OVERALL TOP 5</div>
     <div class="results-table-wrap" style="margin-bottom:8px">
       <table class="rtable">${tableHeader}<tbody>${overallRows}</tbody></table>
     </div>
@@ -4077,7 +4456,11 @@ function resultRow(e, i, isSteel, runs) {
     const finalLabel = methodLabel ? `<div style="font-size:9px;color:var(--muted)">${methodLabel}</div>` : '';
     scoreCols = runCols + `<td style="font-weight:700;font-family:'Roboto Mono',monospace;font-size:13px;text-align:center;white-space:nowrap">${finalLabel}${e.score.toFixed(2)}s</td>`;
   } else {
-    scoreCols = `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center"><span style="font-size:14px">${e.score.total.toFixed(2)}</span><div style="font-size:10px;color:var(--muted)">${e.score.display}</div></td>`;
+    const v = e.score.vals || {};
+    const hits = (v['10']||0)+(v['9']||0)+(v['8']||0)+(v['7']||0)+(v['6']||0);
+    const maxShots = S.paper.shots || 12;
+    const shotsLabel = `<div style="font-size:10px;color:var(--muted)">${hits}/${maxShots} shots</div>`;
+    scoreCols = `<td style="font-weight:700;font-family:'Roboto Mono',monospace;text-align:center"><span style="font-size:14px">${e.score.total.toFixed(2)}</span><div style="font-size:10px;color:var(--muted)">${e.score.display}</div>${shotsLabel}</td>`;
   }
 
   return `<tr>
@@ -4113,30 +4496,40 @@ function buildScoreSheet(wb, type) {
     : `${compName} - ${formatDateDMY(S.date) || S.date}`;
   const sheetName = (isSteel ? 'Steel' : 'Paper').slice(0,31);
   const runs = isSteel ? runCount() : 0;
-  const penaltyTime = S.steel.penalty || 5;
 
   const allE = getAllEntries(type);
-  const catSorted = sortedByCategory(allE);
+
+  // Group by broad category, sorted by GROUP_ORDER
   const groups = new Map();
-  catSorted.forEach(e => {
+  allE.forEach(e => {
     if (!groups.has(e.catKey)) groups.set(e.catKey, []);
     groups.get(e.catKey).push(e);
+  });
+  const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
+    const baseA = a.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
+    const baseB = b.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
+    const iA = GROUP_ORDER.indexOf(baseA);
+    const iB = GROUP_ORDER.indexOf(baseB);
+    if (iA !== iB) return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
+    return a.localeCompare(b);
   });
 
   // Build column headers
   let dataHeaders, numCols;
   if (isSteel) {
     const runCols = Array.from({length: runs}, (_,r) => `Run ${r+1} (s)`);
-    dataHeaders = ['Name', 'Pistol', 'Calibre', 'M/S', ...runCols, methodLabel];
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'S/M', ...runCols, methodLabel];
     numCols = dataHeaders.length;
   } else {
-    dataHeaders = ['Name', 'Pistol', 'Calibre', 'M/S', 'X', '10', '9', '8', '7', '6', 'Score'];
-    numCols = 11;
+    // Paper: Name, Pistol, Calibre, S/M, X, 10, 9, 8, 7, 6, Hits, Score
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'S/M', 'X', '10', '9', '8', '7', '6', 'Hits', 'Score'];
+    numCols = 12;
   }
 
   const rows = [];
-  const boldRows = new Set();   // row indices to bold
-  const mergeRows = new Set();  // row indices to merge
+  const boldRows = new Set();
+  const mergeRows = new Set();
+  const mutedRows = new Set(); // for points rows
 
   // Title row
   rows.push([sheetTitle, ...Array(numCols-1).fill('')]);
@@ -4144,29 +4537,29 @@ function buildScoreSheet(wb, type) {
 
   let lastOrdinal = null;
 
-  groups.forEach((items, key) => {
+  sortedGroupKeys.forEach(key => {
+    const items = groups.get(key);
     const ordinal = items[0].ordinal || 1;
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
 
     if (ordinal !== lastOrdinal) {
       lastOrdinal = ordinal;
-      rows.push(Array(numCols).fill(''));  // blank
+      rows.push(Array(numCols).fill(''));
       const ordLabel = ordinal === 1 ? '1st Run - Scoring Shoot'
         : `${['','','2nd','3rd','4th','5th'][ordinal]||ordinal+'th'} Run - Non Scoring`;
       rows.push([ordLabel, ...Array(numCols-1).fill('')]);
       boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
     }
 
-    rows.push(Array(numCols).fill(''));  // blank before category
-    // Category heading row
-    rows.push([items[0].catInfo.label, ...Array(numCols-1).fill('')]);
+    rows.push(Array(numCols).fill(''));
+    // Use broad group label
+    const baseKey = key.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
+    rows.push([getGroupLabel(baseKey), ...Array(numCols-1).fill('')]);
     boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
 
-    // Column headers
     rows.push(dataHeaders);
     boldRows.add(rows.length-1);
 
-    // Data rows
     sortedItems.forEach(e => {
       if (isSteel) {
         const runData = getRunData(e.shooter.id, e.pi);
@@ -4183,15 +4576,36 @@ function buildScoreSheet(wb, type) {
           parseFloat(e.score.toFixed(2))
         ]);
       } else {
+        // Paper: row 1 = hit counts, row 2 = points
         const v = e.score.vals || {};
+        const hits = (v['10']||0)+(v['9']||0)+(v['8']||0)+(v['7']||0)+(v['6']||0);
+        const totalShots = hits; // X not counted in shots
+        // Row 1: counts
         rows.push([
           `${e.shooter.firstName} ${e.shooter.lastName}`,
           e.pistol.make || '',
           e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre,
           e.pistol.cls,
           v['X']||0, v['10']||0, v['9']||0, v['8']||0, v['7']||0, v['6']||0,
+          hits,
           parseFloat(e.score.total.toFixed(2))
         ]);
+        boldRows.add(rows.length-1);
+        // Row 2: points breakdown (muted, indented)
+        const pts = {
+          X:  parseFloat(((v['X']||0) * 0.01).toFixed(2)),
+          10: parseFloat(((v['10']||0) * 10).toFixed(2)),
+          9:  parseFloat(((v['9']||0)  * 9).toFixed(2)),
+          8:  parseFloat(((v['8']||0)  * 8).toFixed(2)),
+          7:  parseFloat(((v['7']||0)  * 7).toFixed(2)),
+          6:  parseFloat(((v['6']||0)  * 6).toFixed(2)),
+        };
+        rows.push([
+          '', '', '', 'pts',
+          pts.X, pts[10], pts[9], pts[8], pts[7], pts[6],
+          '', parseFloat(e.score.total.toFixed(2))
+        ]);
+        mutedRows.add(rows.length-1);
       }
     });
   });
@@ -4207,14 +4621,18 @@ function buildScoreSheet(wb, type) {
   });
   ws['!merges'] = merges;
 
-  // Apply bold + borders to all cells
+  // Apply styles
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let R = range.s.r; R <= range.e.r; R++) {
     for (let C = range.s.c; C <= range.e.c; C++) {
       const addr = XLSX.utils.encode_cell({r:R, c:C});
       if (!ws[addr]) ws[addr] = {v:'', t:'s'};
       ws[addr].s = {
-        font: { bold: boldRows.has(R) },
+        font: {
+          bold: boldRows.has(R),
+          italic: mutedRows.has(R),
+          color: mutedRows.has(R) ? {rgb:'888888'} : undefined
+        },
         border: {
           top:    {style:'thin', color:{rgb:'CCCCCC'}},
           bottom: {style:'thin', color:{rgb:'CCCCCC'}},
@@ -4230,19 +4648,25 @@ function buildScoreSheet(wb, type) {
   if (isSteel) {
     ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},...runWidths,{wch:14}];
   } else {
-    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10}];
+    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:6},{wch:10}];
   }
 
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 }
 
 function buildAttendSheet(wb) {
-  const data = [['Attendance Register - ' + S.title + ' - ' + formatDate(S.date)], []];
-  data.push(['Name', 'Class 1 (Air)', 'Class 2 (Rimfire)', 'Class 3 (CF <= .38)', 'Class 4 (CF >.38)']);
+  const dateStr = formatDateDMY(S.date) || S.date || '';
+  const data = [
+    ['Attendance Register'],
+    [S.title || '', dateStr],
+    [],
+    ['Name', 'Date', 'Class 1 (Air)', 'Class 2 (Rimfire)', 'Class 3 (CF ≤ .38)', 'Class 4 (CF > .38)']
+  ];
   S.shooters.forEach(s => {
     const a = S.attendance[s.id] || {};
     data.push([
       `${s.firstName} ${s.lastName}`,
+      dateStr,
       a.c1 ? 'YES' : '',
       a.c2 ? 'YES' : '',
       a.c3 ? 'YES' : '',
@@ -4250,6 +4674,7 @@ function buildAttendSheet(wb) {
     ]);
   });
   const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:22},{wch:14},{wch:16},{wch:18},{wch:22},{wch:22}];
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
 }
 
