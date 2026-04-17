@@ -302,34 +302,77 @@ function getRunData(sid, pi) {
   return result;
 }
 
+// ── Broad group definitions (must match index.html) ──────────────────────────
+const GROUP_ORDER = ['air','rimfire_s','rimfire_m','cf38_pistol_s','cf38_pistol_m','cf38_rev_s','cf38_rev_m','cf38plus_pistol_s','cf38plus_pistol_m','cf38plus_rev_s','cf38plus_rev_m','other'];
+
+function getGroupKey(calibre, cls, type) {
+  const c = calibre.toLowerCase().replace(/\s/g,'');
+  const isRev = type === 'R';
+  const isM   = cls === 'M';
+  // Air
+  if (c === 'air' || c === 'airpistol' || c === '.177') return 'air';
+  // Rimfire
+  const rimfireSet = ['.22','22','.22wmr','22wmr','.25','6.35mm'];
+  if (rimfireSet.includes(c)) return isM ? 'rimfire_m' : 'rimfire_s';
+  // CF ≤ .38
+  const cf38Set = ['.32','7.65mm','9mm','9','.356','.357','.38','.380','9mmshort'];
+  if (cf38Set.includes(c)) {
+    if (isRev) return isM ? 'cf38_rev_m' : 'cf38_rev_s';
+    return isM ? 'cf38_pistol_m' : 'cf38_pistol_s';
+  }
+  // CF > .38
+  const co = calibreOrder(calibre);
+  if (co > 0.380 && co < 900) {
+    if (isRev) return isM ? 'cf38plus_rev_m' : 'cf38plus_rev_s';
+    return isM ? 'cf38plus_pistol_m' : 'cf38plus_pistol_s';
+  }
+  return 'other';
+}
+
+function getGroupLabel(key) {
+  const map = {
+    air:              'Air Pistol',
+    rimfire_s:        'Rimfire — Standard',
+    rimfire_m:        'Rimfire — Modified',
+    cf38_pistol_s:    'CF ≤.38 Pistol — Standard',
+    cf38_pistol_m:    'CF ≤.38 Pistol — Modified',
+    cf38_rev_s:       'CF ≤.38 Revolver — Standard',
+    cf38_rev_m:       'CF ≤.38 Revolver — Modified',
+    cf38plus_pistol_s:'CF >.38 Pistol — Standard',
+    cf38plus_pistol_m:'CF >.38 Pistol — Modified',
+    cf38plus_rev_s:   'CF >.38 Revolver — Standard',
+    cf38plus_rev_m:   'CF >.38 Revolver — Modified',
+    other:            'Other',
+  };
+  return map[key] || key;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getAllEntries(type) {
   const entries = [];
 
-  // Step 1: for each shooter, work out which ordinal each pistol entry is
-  // within that shooter's own calibre+class combo (per-shooter count)
-  const shooterPistolOrdinals = {}; // shooterId -> [ordinal per pistol index]
+  // Step 1: per-shooter ordinal within each calibre+class combo
+  const shooterPistolOrdinals = {};
   S.shooters.forEach(s => {
     const perShooterCount = {};
     shooterPistolOrdinals[s.id] = (s.pistols || []).map((p) => {
       const typeStr = p.type === 'R' ? 'R' : '';
       const baseCat = `${p.calibre}_${typeStr}_${p.cls}`;
       perShooterCount[baseCat] = (perShooterCount[baseCat] || 0) + 1;
-      return perShooterCount[baseCat]; // 1 = first, 2 = second, etc
+      return perShooterCount[baseCat];
     });
   });
 
-  // Step 2: build entries with the correct catKey using that shooter's ordinal
+  // Step 2: build entries using broad groupKey
   S.shooters.forEach(s => {
     (s.pistols || []).forEach((p, pi) => {
       const score = type === 'steel' ? calcSteel(s.id, pi) : calcPaper(s.id, pi);
       if (score !== null) {
-        const typeStr = p.type === 'R' ? 'R' : '';
-        const baseCat = `${p.calibre}_${typeStr}_${p.cls}`;
         const ordinal = (shooterPistolOrdinals[s.id] || [])[pi] || 1;
-        const suffix = ordinal > 1 ? (ORDINALS[ordinal] || `${ordinal}th`) : '';
-        // catKey groups ALL shooters' nth entries of this calibre/class together
-        const catKey = suffix ? `${baseCat}_${suffix}` : baseCat;
-        entries.push({ shooter: s, pistol: p, pi, score, catKey, ordinal,
+        const suffix  = ordinal > 1 ? (ORDINALS[ordinal] || `${ordinal}th`) : '';
+        const groupKey = getGroupKey(p.calibre, p.cls, p.type);
+        const catKey = suffix ? `${groupKey}_${suffix}` : groupKey;
+        entries.push({ shooter: s, pistol: p, pi, score, catKey, groupKey, ordinal,
           catInfo: getCatInfo(p.calibre, p.cls, p.type, suffix) });
       }
     });
@@ -342,16 +385,15 @@ function getAllEntries(type) {
 
 function sortedByCategory(entries) {
   return [...entries].sort((a, b) => {
-    // Ordinal group first — 1st before 2nd before 3rd etc
     if (a.ordinal !== b.ordinal) return a.ordinal - b.ordinal;
-    // Within same ordinal: calibre order
+    const ga = GROUP_ORDER.indexOf(a.groupKey);
+    const gb = GROUP_ORDER.indexOf(b.groupKey);
+    if (ga !== gb) return ga - gb;
     const co = calibreOrder(a.pistol.calibre) - calibreOrder(b.pistol.calibre);
     if (co !== 0) return co;
-    // Pistol before Revolver
     const aR = a.pistol.type === 'R' ? 1 : 0;
     const bR = b.pistol.type === 'R' ? 1 : 0;
     if (aR !== bR) return aR - bR;
-    // S before M
     if (a.pistol.cls === 'S' && b.pistol.cls === 'M') return -1;
     if (a.pistol.cls === 'M' && b.pistol.cls === 'S') return 1;
     return 0;
@@ -418,10 +460,12 @@ function buildResultSection(type, entries) {
     : `<th style="text-align:center">SCORE</th>`;
   const tableHeader = `<thead><tr><th>#</th><th>NAME</th><th>PISTOL</th><th>CAT</th>${runHeaders}</tr></thead>`;
 
-  // Overall top entries (all, sorted by score)
-  const overallRows = entries.map((e, i) => resultRow(e, i, isSteel, runs)).join('');
+  // Overall: top 5 only (scoring ordinal=1 entries, sorted by score)
+  const scoringEntries = entries.filter(e => e.ordinal === 1);
+  const top5 = scoringEntries.slice(0, 5);
+  const overallRows = top5.map((e, i) => resultRow(e, i, isSteel, runs)).join('');
 
-  // By category
+  // By broad group
   const catSorted = sortedByCategory(entries);
   const groups = new Map();
   catSorted.forEach(e => {
@@ -442,14 +486,20 @@ function buildResultSection(type, entries) {
     }
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
     const totalCols = isSteel ? runs + 5 : 5;
-    catRows += `<tr class="cat-row"><td colspan="${totalCols}">${items[0].catInfo.label}</td></tr>`;
+    const groupLabel = getGroupLabel(items[0].groupKey);
+    catRows += `<tr class="cat-row"><td colspan="${totalCols}">${groupLabel}</td></tr>`;
     sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel, runs); });
   });
 
+  const top5Note = scoringEntries.length > 5
+    ? `<div style="font-size:11px;color:var(--muted);padding:4px 14px 10px;text-align:right">Top 5 of ${scoringEntries.length} shown — see By Category for full results</div>`
+    : '';
+
   return `
-    <div class="results-section-title">${icon} ${name.toUpperCase()} - OVERALL</div>
+    <div class="results-section-title">${icon} ${name.toUpperCase()} - OVERALL TOP 5</div>
     <div class="results-table-wrap" style="margin-bottom:8px">
       <table class="rtable">${tableHeader}<tbody>${overallRows}</tbody></table>
+      ${top5Note}
     </div>
     <div class="results-section-title" style="background:#2a6faa">${icon} ${name.toUpperCase()} - BY CATEGORY</div>
     <div class="results-table-wrap" style="margin-bottom:28px">
@@ -513,8 +563,8 @@ function buildScoreSheet(wb, type) {
     }
 
     rows.push(Array(numCols).fill(''));  // blank before category
-    // Category heading row
-    rows.push([items[0].catInfo.label, ...Array(numCols-1).fill('')]);
+    // Category heading row (broad group label)
+    rows.push([getGroupLabel(items[0].groupKey), ...Array(numCols-1).fill('')]);
     boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
 
     // Column headers
