@@ -2872,6 +2872,21 @@ function confirmAddPistol() {
 
   closePistolModal();
   syncToFirebase();
+
+  // Collapse all cards and all pistols first, then expand only this card + new pistol
+  S.shooters.forEach(s2 => {
+    window._cardCollapsed[s2.id] = true;
+    (s2.pistols || []).forEach((_, pi2) => {
+      window._pistolCollapsed[s2.id + '-' + pi2] = true;
+    });
+  });
+  // Expand this shooter's card and the new pistol entry
+  window._cardCollapsed[sid] = false;
+  window._pistolCollapsed[sid + '-' + pi] = false;
+  // Keep pill toggle state consistent (neither all-expanded)
+  window._allCardsExpanded = false;
+  window._allPistolsExpanded = false;
+
   reRenderShooterCard(sid);
 }
 
@@ -4175,18 +4190,28 @@ function buildEntitySheet(s, year, blank) {
   const lastName = blank ? '' : (s.lastName || '');
   const firstName = blank ? '' : (s.firstName || '');
 
-  // Get session dates sorted
-  const sessionDates = blank ? [] : Object.values((s && s.dates) || {})
-    .filter(d => typeof d === 'string' && d.length === 10).sort();
+  // Get session dates sorted, broken out per class
+  // dates structure: { "20240415": { c1: true, c2: true }, ... }
+  const classDates = { c1: [], c2: [], c3: [], c4: [] };
+  if (!blank && s && s.dates) {
+    const dateKeys = Object.keys(s.dates).filter(k => /^\d{8}$/.test(k)).sort();
+    dateKeys.forEach(dk => {
+      const isoDate = `${dk.slice(0,4)}-${dk.slice(4,6)}-${dk.slice(6,8)}`;
+      const rec = s.dates[dk] || {};
+      ['c1','c2','c3','c4'].forEach(cls => {
+        if (rec[cls]) classDates[cls].push(isoDate);
+      });
+    });
+  }
 
-  // Build data rows
+  // Build data rows — one row per class entry, each with its actual date
   const dataRows = [];
   if (!blank && s) {
-    let di = 0;
     [['c1',1],['c2',2],['c3',3],['c4',4]].forEach(([cls, num]) => {
       const count = s[cls] || 0;
+      const datesForCls = classDates[cls];
       for (let i = 0; i < count; i++) {
-        const dateStr = di < sessionDates.length ? formatDateDMY(sessionDates[di++]) : '';
+        const dateStr = i < datesForCls.length ? formatDateDMY(datesForCls[i]) : '';
         dataRows.push([dateStr, partType, 'T', num]);
       }
     });
@@ -4359,7 +4384,7 @@ function getCatInfo(calibre, cls, type, suffix) {
 function getGroupKey(calibre, cls, type) {
   const ssaa = calibreToClass(calibre);
   if (ssaa === 'c1') return 'air';
-  if (ssaa === 'c2') return `rimfire_${cls}`;
+  if (ssaa === 'c2') return `rimfire_${type}_${cls}`;
   if (ssaa === 'c3') return `cf38_${type}_${cls}`;
   if (ssaa === 'c4') return `cf40_${type}_${cls}`;
   return `other_${type}_${cls}`;
@@ -4369,8 +4394,10 @@ function getGroupKey(calibre, cls, type) {
 function getGroupLabel(groupKey) {
   const map = {
     'air':           'Air',
-    'rimfire_S':     'Rimfire — Standard',
-    'rimfire_M':     'Rimfire — Modified',
+    'rimfire_P_S':   'Rimfire Pistol — Standard',
+    'rimfire_P_M':   'Rimfire Pistol — Modified',
+    'rimfire_R_S':   'Rimfire Revolver — Standard',
+    'rimfire_R_M':   'Rimfire Revolver — Modified',
     'cf38_P_S':      'Centrefire ≤.38 Pistol — Standard',
     'cf38_P_M':      'Centrefire ≤.38 Pistol — Modified',
     'cf38_R_S':      'Centrefire ≤.38 Revolver — Standard',
@@ -4384,7 +4411,7 @@ function getGroupLabel(groupKey) {
 }
 
 // Sort order for group keys
-const GROUP_ORDER = ['air','rimfire_S','rimfire_M','cf38_P_S','cf38_P_M','cf38_R_S','cf38_R_M','cf40_P_S','cf40_P_M','cf40_R_S','cf40_R_M'];
+const GROUP_ORDER = ['air','rimfire_P_S','rimfire_P_M','rimfire_R_S','rimfire_R_M','cf38_P_S','cf38_P_M','cf38_R_S','cf38_R_M','cf40_P_S','cf40_P_M','cf40_R_S','cf40_R_M'];
 
 const ORDINALS = ['', '', '2nd', '3rd', '4th', '5th']; // index matches ordinal number
 

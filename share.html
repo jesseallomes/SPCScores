@@ -336,7 +336,7 @@ function calibreToClass(calibre) {
 function getGroupKey(calibre, cls, type) {
   const ssaa = calibreToClass(calibre);
   if (ssaa === 'c1') return 'air';
-  if (ssaa === 'c2') return `rimfire_${cls}`;
+  if (ssaa === 'c2') return `rimfire_${type}_${cls}`;
   if (ssaa === 'c3') return `cf38_${type}_${cls}`;
   if (ssaa === 'c4') return `cf40_${type}_${cls}`;
   return `other_${type}_${cls}`;
@@ -344,22 +344,24 @@ function getGroupKey(calibre, cls, type) {
 
 function getGroupLabel(groupKey) {
   const map = {
-    'air':       'Air',
-    'rimfire_S': 'Rimfire — Standard',
-    'rimfire_M': 'Rimfire — Modified',
-    'cf38_P_S':  'Centrefire ≤.38 Pistol — Standard',
-    'cf38_P_M':  'Centrefire ≤.38 Pistol — Modified',
-    'cf38_R_S':  'Centrefire ≤.38 Revolver — Standard',
-    'cf38_R_M':  'Centrefire ≤.38 Revolver — Modified',
-    'cf40_P_S':  'Centrefire >.38 Pistol — Standard',
-    'cf40_P_M':  'Centrefire >.38 Pistol — Modified',
-    'cf40_R_S':  'Centrefire >.38 Revolver — Standard',
-    'cf40_R_M':  'Centrefire >.38 Revolver — Modified',
+    'air':         'Air',
+    'rimfire_P_S': 'Rimfire Pistol — Standard',
+    'rimfire_P_M': 'Rimfire Pistol — Modified',
+    'rimfire_R_S': 'Rimfire Revolver — Standard',
+    'rimfire_R_M': 'Rimfire Revolver — Modified',
+    'cf38_P_S':    'Centrefire ≤.38 Pistol — Standard',
+    'cf38_P_M':    'Centrefire ≤.38 Pistol — Modified',
+    'cf38_R_S':    'Centrefire ≤.38 Revolver — Standard',
+    'cf38_R_M':    'Centrefire ≤.38 Revolver — Modified',
+    'cf40_P_S':    'Centrefire >.38 Pistol — Standard',
+    'cf40_P_M':    'Centrefire >.38 Pistol — Modified',
+    'cf40_R_S':    'Centrefire >.38 Revolver — Standard',
+    'cf40_R_M':    'Centrefire >.38 Revolver — Modified',
   };
   return map[groupKey] || groupKey;
 }
 
-const GROUP_ORDER = ['air','rimfire_S','rimfire_M','cf38_P_S','cf38_P_M','cf38_R_S','cf38_R_M','cf40_P_S','cf40_P_M','cf40_R_S','cf40_R_M'];
+const GROUP_ORDER = ['air','rimfire_P_S','rimfire_P_M','rimfire_R_S','rimfire_R_M','cf38_P_S','cf38_P_M','cf38_R_S','cf38_R_M','cf40_P_S','cf40_P_M','cf40_R_S','cf40_R_M'];
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getAllEntries(type) {
