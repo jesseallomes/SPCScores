@@ -2449,10 +2449,11 @@ function pistolScoreEntry(s, p, pi) {
     </div>`;
   }
 
+  const pistolCollapsed = !!(window._pistolCollapsed && window._pistolCollapsed[s.id + '-' + pi]);
   return `<div class="pistol-entry" id="pe-${s.id}-${pi}">
     <div class="pistol-entry-header" style="cursor:pointer" onclick="togglePistolCollapse('${s.id}',${pi})">
       <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
-        <span id="pe-chevron-${s.id}-${pi}" style="font-size:12px;color:var(--muted);flex-shrink:0">${window._pistolCollapsed && window._pistolCollapsed['${s.id}-${pi}'] ? '▶' : '▼'}</span>
+        <span id="pe-chevron-${s.id}-${pi}" style="font-size:12px;color:var(--muted);flex-shrink:0">${pistolCollapsed ? '▶' : '▼'}</span>
         <span class="pistol-label">${p.make || 'Pistol'} (${p.type === 'R' ? 'Revolver' : 'Pistol'})  </span>
         <span class="pill ${catInfo.cls}">${catInfo.label}</span>
       </div>
@@ -2461,7 +2462,7 @@ function pistolScoreEntry(s, p, pi) {
         <button class="btn btn-xs btn-outline" style="color:var(--accent);border-color:var(--accent);flex-shrink:0" onclick="event.stopPropagation();removePistol('${s.id}',${pi})">Remove</button>
       </div>
     </div>
-    <div id="pe-body-${s.id}-${pi}" style="display:${window._pistolCollapsed && window._pistolCollapsed['${s.id}-${pi}'] ? 'none' : 'block'}">
+    <div id="pe-body-${s.id}-${pi}" style="display:${pistolCollapsed ? 'none' : 'block'}">
       ${steelHtml}${paperHtml}
     </div>
   </div>`;
@@ -4738,9 +4739,9 @@ function buildScoreSheet(wb, type) {
     dataHeaders = ['Name', 'Pistol', 'Calibre', 'S/M', ...runCols, methodLabel];
     numCols = dataHeaders.length;
   } else {
-    // Paper: Name, Pistol, Calibre, S/M, X, 10, 9, 8, 7, 6, Hits, Score
-    dataHeaders = ['Name', 'Pistol', 'Calibre', 'S/M', 'X', '10', '9', '8', '7', '6', 'Hits', 'Score'];
-    numCols = 12;
+    // Paper: Name, Pistol, Calibre, S/M, X, 10, 9, 8, 7, 6, Hits/Score
+    dataHeaders = ['Name', 'Pistol', 'Calibre', 'S/M', 'X', '10', '9', '8', '7', '6', 'Hits / Score'];
+    numCols = 11;
   }
 
   const rows = [];
@@ -4793,22 +4794,20 @@ function buildScoreSheet(wb, type) {
           parseFloat(e.score.toFixed(2))
         ]);
       } else {
-        // Paper: row 1 = hit counts, row 2 = points
+        // Paper: row 1 = hit counts (last col = hits), row 2 = points (last col = score)
         const v = e.score.vals || {};
         const hits = (v['10']||0)+(v['9']||0)+(v['8']||0)+(v['7']||0)+(v['6']||0);
-        const totalShots = hits; // X not counted in shots
-        // Row 1: counts
+        // Row 1: counts, last col = hits
         rows.push([
           `${e.shooter.firstName} ${e.shooter.lastName}`,
           e.pistol.make || '',
           e.pistol.type === 'R' ? `${e.pistol.calibre}R` : e.pistol.calibre,
           e.pistol.cls,
           v['X']||0, v['10']||0, v['9']||0, v['8']||0, v['7']||0, v['6']||0,
-          hits,
-          parseFloat(e.score.total.toFixed(2))
+          hits
         ]);
         boldRows.add(rows.length-1);
-        // Row 2: points breakdown (muted, indented)
+        // Row 2: points breakdown (muted), last col = total score
         const pts = {
           X:  parseFloat(((v['X']||0) * 0.01).toFixed(2)),
           10: parseFloat(((v['10']||0) * 10).toFixed(2)),
@@ -4820,7 +4819,7 @@ function buildScoreSheet(wb, type) {
         rows.push([
           '', '', '', 'pts',
           pts.X, pts[10], pts[9], pts[8], pts[7], pts[6],
-          '', parseFloat(e.score.total.toFixed(2))
+          parseFloat(e.score.total.toFixed(2))
         ]);
         mutedRows.add(rows.length-1);
       }
@@ -4865,7 +4864,7 @@ function buildScoreSheet(wb, type) {
   if (isSteel) {
     ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},...runWidths,{wch:14}];
   } else {
-    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:6},{wch:10}];
+    ws['!cols'] = [{wch:22},{wch:18},{wch:10},{wch:6},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:5},{wch:10}];
   }
 
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
