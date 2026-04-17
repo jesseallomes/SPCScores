@@ -307,7 +307,7 @@ input:focus, select:focus {
   background: var(--card);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  margin-bottom: 0;
+  margin-bottom: 12px;
   overflow: hidden;
   border-left: 4px solid var(--accent2);
 }
@@ -321,9 +321,6 @@ input:focus, select:focus {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 6px;
-  position: sticky;
-  top: 98px;
-  z-index: 10;
   border-radius: 0;
 }
 
@@ -936,6 +933,13 @@ table.rtable tr:hover td { background: #fafaf8; }
 <div id="page-scores" class="page">
   <div id="scores-header-bar" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
 
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+    <button class="btn btn-outline btn-sm" onclick="setAllCards(false)" title="Expand all score cards">⊞ All Cards</button>
+    <button class="btn btn-outline btn-sm" onclick="setAllCards(true)" title="Collapse all score cards">⊟ All Cards</button>
+    <div style="width:1px;height:22px;background:var(--border);margin:0 2px"></div>
+    <button class="btn btn-outline btn-sm" onclick="setAllPistols(false)" title="Expand all pistols">&#x229E; All Pistols</button>
+    <button class="btn btn-outline btn-sm" onclick="setAllPistols(true)" title="Collapse all pistols">&#x229F; All Pistols</button>
+  </div>
   <div style="position:relative;margin-bottom:10px" id="score-search-wrap">
     <input type="text" id="score-search" placeholder="Filter shooters..."
       style="margin-bottom:0;padding-left:32px"
@@ -1717,7 +1721,7 @@ function searchMemberDropdown(query) {
     row.style.cssText = 'padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:'+(already?'default':'pointer')+';background:var(--card);opacity:'+(already?'0.5':'1');
     const nameSpan = document.createElement('span');
     nameSpan.style.fontSize = '15px';
-    nameSpan.innerHTML = '<strong>'+(m.lastName||'')+'</strong>, '+(m.firstName||'')
+    nameSpan.innerHTML = '<strong>'+(m.firstName||'')+'</strong> '+(m.lastName||'')
       +(m.isRO?' <span style="background:var(--gold);color:#000;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">RO</span>':'')
       +(m.isVisitor?' <span style="background:#888;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">VIS</span>':'');
     const addSpan = document.createElement('span');
@@ -2255,27 +2259,29 @@ function shooterScoreCard(s) {
   const roBadge = s.isRO ? `<span style="background:#c9861a;color:#000;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;font-family:'Roboto Mono',monospace">RO</span>` : '';
   const visBadge = s.isVisitor ? `<span style="background:#666;color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:700;font-family:'Roboto Mono',monospace">VISITOR</span>` : '';
 
+  const cardCollapsed = window._cardCollapsed && window._cardCollapsed[s.id];
   return `<div class="shooter-score-card" id="scard-${s.id}" style="border-left-color:${s.isVisitor ? '#888' : s.isRO ? '#c9861a' : 'var(--accent2)'}">
-    <div class="scard-header">
+    <div class="scard-header" style="cursor:pointer" onclick="toggleCardCollapse('${s.id}',event)">
       <div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span onclick="removeShooter('${s.id}')" title="Remove shooter"
+          <span onclick="event.stopPropagation();removeShooter('${s.id}')" title="Remove shooter"
             style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(200,55,45,0.15);color:var(--accent);font-size:13px;cursor:pointer;flex-shrink:0;font-weight:700;line-height:1">✕</span>
           <div class="scard-name">${s.firstName} ${s.lastName} ${roBadge} ${visBadge}</div>
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:4px;color:white;font-size:12px;cursor:pointer;margin:0;text-transform:none;letter-spacing:0">
+        <label style="display:flex;align-items:center;gap:4px;color:white;font-size:12px;cursor:pointer;margin:0;text-transform:none;letter-spacing:0" onclick="event.stopPropagation()">
           <input type="checkbox" ${s.isRO ? 'checked' : ''} onchange="toggleFlag('${s.id}','isRO',this.checked)" style="width:16px;height:16px;margin:0;accent-color:#c9861a">
           RO
         </label>
-        <label style="display:flex;align-items:center;gap:4px;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;margin:0;text-transform:none;letter-spacing:0">
+        <label style="display:flex;align-items:center;gap:4px;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;margin:0;text-transform:none;letter-spacing:0" onclick="event.stopPropagation()">
           <input type="checkbox" ${s.isVisitor ? 'checked' : ''} onchange="toggleFlag('${s.id}','isVisitor',this.checked)" style="width:16px;height:16px;margin:0;accent-color:#aaa">
           Visitor
         </label>
+        <span id="scard-chev-${s.id}" style="font-size:14px;color:rgba(255,255,255,0.6);margin-left:4px">${cardCollapsed ? '▶' : '▼'}</span>
       </div>
     </div>
-    <div class="scard-body">
+    <div id="scard-body-${s.id}" class="scard-body" style="display:${cardCollapsed ? 'none' : 'block'}">
       <div id="pistol-entries-${s.id}">
         ${pistolEntries || '<div style="color:var(--muted);font-size:13px;padding:8px 0">No pistols added yet.</div>'}
       </div>
@@ -3017,6 +3023,43 @@ function togglePistolCollapse(sid, pi) {
   if (chev) chev.textContent = window._pistolCollapsed[key] ? '▶' : '▼';
 }
 
+window._cardCollapsed = window._cardCollapsed || {};
+
+function toggleCardCollapse(sid, event) {
+  // Don't collapse if clicking the ✕ remove button or the checkboxes (they stopPropagation, but safety net)
+  if (event && event.target && event.target.tagName === 'INPUT') return;
+  window._cardCollapsed[sid] = !window._cardCollapsed[sid];
+  const body = document.getElementById('scard-body-' + sid);
+  const chev = document.getElementById('scard-chev-' + sid);
+  if (body) body.style.display = window._cardCollapsed[sid] ? 'none' : 'block';
+  if (chev) chev.textContent = window._cardCollapsed[sid] ? '▶' : '▼';
+}
+
+function setAllCards(collapse) {
+  window._cardCollapsed = window._cardCollapsed || {};
+  S.shooters.forEach(s => {
+    window._cardCollapsed[s.id] = collapse;
+    const body = document.getElementById('scard-body-' + s.id);
+    const chev = document.getElementById('scard-chev-' + s.id);
+    if (body) body.style.display = collapse ? 'none' : 'block';
+    if (chev) chev.textContent = collapse ? '▶' : '▼';
+  });
+}
+
+function setAllPistols(collapse) {
+  window._pistolCollapsed = window._pistolCollapsed || {};
+  S.shooters.forEach(s => {
+    (s.pistols || []).forEach((p, pi) => {
+      const key = s.id + '-' + pi;
+      window._pistolCollapsed[key] = collapse;
+      const body = document.getElementById('pe-body-' + s.id + '-' + pi);
+      const chev = document.getElementById('pe-chevron-' + s.id + '-' + pi);
+      if (body) body.style.display = collapse ? 'none' : 'block';
+      if (chev) chev.textContent = collapse ? '▶' : '▼';
+    });
+  });
+}
+
 function removePistol(sid, pi) {
   if (!confirm('Remove this pistol entry?')) return;
   const shooter = S.shooters.find(s => s.id === sid);
@@ -3090,7 +3133,7 @@ function searchLateMembers(query) {
     row.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between';
     const nameSpan = document.createElement('span');
     nameSpan.style.fontSize = '14px';
-    nameSpan.innerHTML = '<strong>'+(m.lastName||'')+'</strong>, '+(m.firstName||'');
+    nameSpan.innerHTML = '<strong>'+(m.firstName||'')+'</strong> '+(m.lastName||'');
     const addBtn = document.createElement('button');
     addBtn.className = 'btn btn-green btn-xs';
     addBtn.textContent = 'Add';
@@ -3245,7 +3288,7 @@ async function loadMembersList() {
     return `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
         <div>
-          <span style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase">${m.lastName||''}, ${m.firstName||''}</span>
+          <span style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase">${m.firstName||''} ${m.lastName||''}</span>
           ${m.isRO ? '<span style="margin-left:6px;background:var(--gold);color:#000;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">RO</span>' : ''}
           ${m.isVisitor ? '<span style="margin-left:6px;background:#888;color:#fff;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">VISITOR</span>' : ''}
           ${(function(){ const chk = m.optOutPistols ? "" : "checked"; return `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;cursor:pointer;font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0" onclick="event.stopPropagation()"><input type="checkbox" ${chk} style="width:14px;height:14px;accent-color:var(--accent2);margin:0" onchange="toggleOptOutPistols('${m.id}')"> Store pistols</label>`; })()}
