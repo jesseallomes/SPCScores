@@ -770,9 +770,12 @@ table.rtable tr:hover td { background: #fafaf8; }
         <input type="text" id="shoot-title" placeholder="e.g. Tuesday Night Club">
       </div>
     </div>
-    <div>
+    <div style="position:relative">
       <label>Range Officer Name</label>
-      <input type="text" id="ro-name" placeholder="Your name / range identifier">
+      <input type="text" id="ro-name" placeholder="Search RO members..." autocomplete="off"
+        oninput="searchRODropdown(this.value)" onfocus="searchRODropdown(this.value)"
+        style="margin-bottom:0">
+      <div id="ro-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1.5px solid var(--accent2);border-top:none;border-radius:0 0 6px 6px;max-height:180px;overflow-y:auto;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
     </div>
   </div>
 
@@ -874,6 +877,17 @@ table.rtable tr:hover td { background: #fafaf8; }
 
 <!-- ===== SHOOTERS PAGE ===== -->
 <div id="page-shooters" class="page">
+
+  <!-- Check-in auto-populate banner -->
+  <div id="checkin-banner" class="card" style="display:none;background:#e8f4ff;border:1.5px solid var(--accent2);padding:12px 14px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:14px;color:var(--accent2)">📲 Check-ins Available</div>
+        <div id="checkin-banner-detail" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <button class="btn btn-blue btn-sm" onclick="addAllCheckedInShooters()">+ Add All Checked In</button>
+    </div>
+  </div>
 
   <!-- Select from known attendees -->
   <div class="card">
@@ -1006,7 +1020,7 @@ table.rtable tr:hover td { background: #fafaf8; }
       <button class="admin-sub-tab" onclick="showAdminTab('settings')">⚙ Settings</button>
       <button class="admin-sub-tab" onclick="showAdminTab('members')">👥 Shooters</button>
       <button class="admin-sub-tab" onclick="showAdminTab('annual')">📊 Annual</button>
-      <button class="admin-sub-tab" onclick="showAdminTab('attend')">📋 Attendance</button>
+      <button class="admin-sub-tab" onclick="showAdminTab('attend')">📋 Check-in History</button>
       <button class="admin-sub-tab" onclick="showAdminTab('danger')">🗑 Danger</button>
     </div>
 
@@ -1028,6 +1042,20 @@ table.rtable tr:hover td { background: #fafaf8; }
     <!-- Settings sub-page -->
     <div id="admin-tab-settings" class="admin-sub-page" style="display:none">
       <div class="section-head">⚙ Settings</div>
+      <div class="card">
+        <div class="card-title">💰 Check-in Fees</div>
+        <div class="row2">
+          <div>
+            <label>Full Fee ($)</label>
+            <input type="text" id="fee-full" placeholder="5" inputmode="decimal">
+          </div>
+          <div>
+            <label>Range Pass ($)</label>
+            <input type="text" id="fee-range" placeholder="3" inputmode="decimal">
+          </div>
+        </div>
+        <button class="btn btn-blue btn-sm" onclick="saveFeeSettings()">💾 Save Fee Settings</button>
+      </div>
       <div class="card">
         <div class="card-title">🎨 Display Theme</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1096,17 +1124,52 @@ table.rtable tr:hover td { background: #fafaf8; }
       <div id="annual-register-content"><div class="empty-state">Select a year above.</div></div>
     </div>
 
-    <!-- Attendance sub-page -->
+    <!-- Check-in History sub-page -->
     <div id="admin-tab-attend" class="admin-sub-page" style="display:none">
-      <div class="section-head">📋 Manual Attendance Correction</div>
-      <div class="card">
-        <div class="card-title">Attendance Register</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Manually correct tonight's attendance ticks if needed.</div>
-        <div class="attend-grid" id="attend-grid"></div>
+      <div class="section-head">📋 Check-in History</div>
+
+      <!-- Sub-tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="btn btn-red btn-sm" id="ci-subtab-btn-sessions" onclick="showCISubTab('sessions')">📅 By Session</button>
+        <button class="btn btn-outline btn-sm" id="ci-subtab-btn-fees" onclick="showCISubTab('fees')">💰 Fee Reconciliation</button>
       </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-blue" style="flex:3" onclick="saveAttendance()">SAVE ATTENDANCE</button>
-        <button class="btn btn-outline btn-sm" style="flex:1;color:var(--muted);border-color:var(--muted)" onclick="resetAttendance()">Reset</button>
+
+      <!-- By Session -->
+      <div id="ci-subtab-sessions">
+        <div class="card" style="padding:12px 16px;margin-bottom:12px">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px">
+              <label>Year</label>
+              <select id="ci-year-sel" onchange="loadCISessionList()" style="margin-bottom:0"></select>
+            </div>
+            <button class="btn btn-green btn-sm" onclick="exportCheckinExcel()">📊 Export Year</button>
+          </div>
+        </div>
+        <div id="ci-session-list"><div class="empty-state">Select a year above.</div></div>
+      </div>
+
+      <!-- Fee Reconciliation -->
+      <div id="ci-subtab-fees" style="display:none">
+        <div class="card" style="padding:12px 16px;margin-bottom:12px">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div style="flex:1;min-width:120px">
+              <label>Year</label>
+              <select id="ci-fee-year-sel" onchange="loadCIFeeData()" style="margin-bottom:0"></select>
+            </div>
+            <div style="flex:1;min-width:120px">
+              <label>Filter by Payment</label>
+              <select id="ci-fee-filter" onchange="renderCIFeeList()" style="margin-bottom:0">
+                <option value="all">All</option>
+                <option value="cash">Cash only</option>
+                <option value="bank">Bank only</option>
+              </select>
+            </div>
+            <button class="btn btn-green btn-sm" onclick="exportFeeExcel()">📊 Export</button>
+          </div>
+          <input type="text" id="ci-fee-search" placeholder="Search by name..." style="margin-top:10px;margin-bottom:0" oninput="renderCIFeeList()">
+        </div>
+        <div id="ci-fee-totals" style="display:none" class="card" style="padding:12px 16px;margin-bottom:12px"></div>
+        <div id="ci-fee-list"><div class="empty-state">Select a year above.</div></div>
       </div>
     </div>
 
@@ -2035,6 +2098,9 @@ async function confirmAddMember() {
   const member = { ...existing, id: mid, firstName: first, lastName: last, isRO, optOutPistols, pistols };
   allMembers[mid] = member;
   if (db && isFirebaseReady) await db.ref(`members/${mid}`).set(member);
+  // Recompute display names for all members and persist
+  computeDisplayNames();
+  await persistDisplayNames();
 
   // If this is an edit and name/isRO changed, propagate to current session + all historical sessions
   const nameChanged = existingId && (
@@ -2287,7 +2353,7 @@ function shooterScoreCard(s) {
         <div style="display:flex;align-items:center;gap:8px">
           <span onclick="event.stopPropagation();removeShooter('${s.id}')" title="Remove shooter"
             style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(200,55,45,0.15);color:var(--accent);font-size:13px;cursor:pointer;flex-shrink:0;font-weight:700;line-height:1">✕</span>
-          <div class="scard-name">${s.firstName} ${s.lastName} ${roBadge} ${visBadge}</div>
+          <div class="scard-name">${getDisplayName(s)} ${roBadge} ${visBadge}</div>
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -3356,9 +3422,10 @@ async function loadMembersList() {
     return `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
         <div>
-          <span style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase">${m.firstName||''} ${m.lastName||''}</span>
+          <span style="font-family:'Roboto Condensed',sans-serif;font-weight:700;font-size:16px;text-transform:uppercase">${getDisplayName(m)}</span>
           ${m.isRO ? '<span style="margin-left:6px;background:var(--gold);color:#000;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">RO</span>' : ''}
           ${m.isVisitor ? '<span style="margin-left:6px;background:#888;color:#fff;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">VISITOR</span>' : ''}
+          ${renderNicknameBadge(m)}
           ${(function(){ const chk = m.optOutPistols ? "" : "checked"; return `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;cursor:pointer;font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0" onclick="event.stopPropagation()"><input type="checkbox" ${chk} style="width:14px;height:14px;accent-color:var(--accent2);margin:0" onchange="toggleOptOutPistols('${m.id}')"> Store pistols</label>`; })()}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -3799,6 +3866,10 @@ function loadSettingsUI() {
   document.getElementById('email-scores').value = CFG.emailScores || '';
   document.getElementById('email-attend').value = CFG.emailAttend || '';
   document.getElementById('email-annual').value = CFG.emailAnnual || '';
+  const ff = document.getElementById('fee-full');
+  const fr = document.getElementById('fee-range');
+  if (ff) ff.value = (CFG.fees && CFG.fees.full  !== undefined) ? CFG.fees.full  : 5;
+  if (fr) fr.value = (CFG.fees && CFG.fees.range !== undefined) ? CFG.fees.range : 3;
   updateThemeButtons();
   renderClubGunsList();
 }
@@ -5401,6 +5472,516 @@ window.addEventListener('appinstalled', () => {
   document.getElementById('pwa-install-banner')?.remove();
   toast('SPC Scorer installed to home screen!', 'success');
 });
+
+// ====================================================
+// NICKNAME BADGE helper (avoids quote-escaping in template literals)
+// ====================================================
+function renderNicknameBadge(m) {
+  if (!m || !m.nickname) return '';
+  var span = '<span style="margin-left:6px;background:#e8f4ff;color:var(--accent2);' +
+    'padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">' +
+    m.nickname + '</span>';
+  var btn = ' <button class="btn btn-xs" style="color:var(--muted);border:1px solid ' +
+    'var(--muted);background:white;margin-left:4px" ' +
+    'onclick="clearMemberNickname(\'' + m.id + '\')">Clear nickname</button>';
+  return span + btn;
+}
+
+// ====================================================
+// DISPLAY NAMES — minimum unique prefix
+// ====================================================
+function computeDisplayNames() {
+  const all = Object.values(allMembers);
+  const byFirst = {};
+  all.forEach(m => {
+    const fn = (m.firstName || '').toLowerCase();
+    if (!byFirst[fn]) byFirst[fn] = [];
+    byFirst[fn].push(m);
+  });
+  all.forEach(m => {
+    const fn = (m.firstName || '').toLowerCase();
+    const group = byFirst[fn];
+    if (group.length === 1) {
+      allMembers[m.id].displayName = m.firstName;
+    } else {
+      const ln = m.lastName || '';
+      const others = group.filter(o => o.id !== m.id);
+      let len = 1;
+      while (len <= ln.length) {
+        const prefix = ln.substring(0, len).toLowerCase();
+        const clash = others.some(o => (o.lastName || '').toLowerCase().substring(0, len) === prefix);
+        if (!clash) break;
+        len++;
+      }
+      allMembers[m.id].displayName = m.firstName + (ln ? ' ' + ln.substring(0, len) : '');
+    }
+  });
+}
+
+async function persistDisplayNames() {
+  if (!db || !isFirebaseReady) return;
+  const writes = Object.values(allMembers).map(m =>
+    db.ref('members/' + m.id + '/displayName').set(m.displayName || m.firstName)
+  );
+  await Promise.all(writes);
+}
+
+// Returns the public-facing name for a shooter object (has firstName/lastName/displayName/nickname)
+function getDisplayName(s) {
+  // s can be a session shooter or a member object
+  const memberId = s.memberId || s.id;
+  const m = memberId ? allMembers[memberId] : null;
+  const nickname = m ? m.nickname : (s.nickname || '');
+  const displayName = (m && m.displayName) ? m.displayName
+    : (s.displayName || (s.firstName + (s.lastName ? ' ' + s.lastName.charAt(0) : '')));
+  if (nickname) return nickname + ' (' + displayName + ')';
+  return displayName;
+}
+
+// ====================================================
+// RO SEARCH DROPDOWN (Comp Setup)
+// ====================================================
+function searchRODropdown(val) {
+  const dd = document.getElementById('ro-dropdown');
+  if (!dd) return;
+  const q = (val || '').toLowerCase().trim();
+  const roList = Object.values(allMembers).filter(m => m.isRO);
+  if (!q && !document.getElementById('ro-name').matches(':focus')) { dd.style.display = 'none'; return; }
+  const matches = roList.filter(m =>
+    (m.firstName + ' ' + m.lastName).toLowerCase().includes(q) ||
+    (m.displayName || '').toLowerCase().includes(q)
+  );
+  if (!matches.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(m => {
+    const dn = getDisplayName(m);
+    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:15px;font-weight:600" ' +
+      'onclick="selectROFromDropdown(\'' + m.id + '\')"> ' + dn + '</div>';
+  }).join('');
+  dd.style.display = 'block';
+}
+
+function selectROFromDropdown(mid) {
+  const m = allMembers[mid];
+  if (!m) return;
+  const input = document.getElementById('ro-name');
+  if (input) input.value = m.firstName + ' ' + m.lastName;
+  const dd = document.getElementById('ro-dropdown');
+  if (dd) dd.style.display = 'none';
+  S.ro = m.firstName + ' ' + m.lastName;
+}
+
+// Close RO dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const inp = document.getElementById('ro-name');
+  const dd = document.getElementById('ro-dropdown');
+  if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+});
+
+// ====================================================
+// FEE SETTINGS
+// ====================================================
+async function saveFeeSettings() {
+  const full = parseFloat(document.getElementById('fee-full').value) || 5;
+  const range = parseFloat(document.getElementById('fee-range').value) || 3;
+  CFG.fees = { full, range };
+  await saveSettings();
+  toast('Fee settings saved!', 'success');
+}
+
+// ====================================================
+// CURRENT CHECK-INS WATCHER (Registration tab)
+// ====================================================
+let _checkinWatcherOn = false;
+let _currentCheckins = {};
+
+function startCheckinWatcher() {
+  if (_checkinWatcherOn || !db || !isFirebaseReady) return;
+  _checkinWatcherOn = true;
+  db.ref('currentCheckins').on('value', snap => {
+    _currentCheckins = snap.val() || {};
+    updateCheckinBanner();
+  });
+}
+
+function updateCheckinBanner() {
+  const banner = document.getElementById('checkin-banner');
+  const detail = document.getElementById('checkin-banner-detail');
+  if (!banner) return;
+  const entries = Object.values(_currentCheckins);
+  if (!entries.length) { banner.style.display = 'none'; return; }
+  // Filter out shooters already in session
+  const existingMemberIds = new Set(S.shooters.map(s => s.memberId).filter(Boolean));
+  const pending = entries.filter(ci => !existingMemberIds.has(ci.memberId));
+  if (!pending.length) { banner.style.display = 'none'; return; }
+  banner.style.display = 'block';
+  detail.textContent = pending.length + ' shooter' + (pending.length !== 1 ? 's' : '') + ' checked in and not yet added';
+}
+
+async function addAllCheckedInShooters() {
+  const entries = Object.values(_currentCheckins);
+  const existingMemberIds = new Set(S.shooters.map(s => s.memberId).filter(Boolean));
+  let added = 0;
+  for (const ci of entries) {
+    if (!ci.memberId || existingMemberIds.has(ci.memberId)) continue;
+    // Load member from allMembers or fetch
+    let m = allMembers[ci.memberId];
+    if (!m) {
+      const snap = await db.ref('members/' + ci.memberId).once('value');
+      m = snap.val();
+      if (m) allMembers[m.id] = m;
+    }
+    if (!m) continue;
+    const shooter = {
+      id: newId(), memberId: m.id,
+      firstName: m.firstName, lastName: m.lastName,
+      displayName: m.displayName || m.firstName,
+      pistols: [], isRO: ci.isRO || m.isRO || false, isVisitor: m.isVisitor || false
+    };
+    S.shooters.push(shooter);
+    S.scores[shooter.id] = {};
+    S.attendance[shooter.id] = { c1: false, c2: false, c3: false, c4: false };
+    existingMemberIds.add(m.id);
+    added++;
+  }
+  if (added) {
+    syncToFirebase();
+    renderSelectedChips();
+    updateCheckinBanner();
+    toast(added + ' shooter' + (added !== 1 ? 's' : '') + ' added from check-ins', 'success');
+  } else {
+    toast('All checked-in shooters already added', 'success');
+  }
+}
+
+// Start watcher when Registration tab opens — hook into nav()
+const _origNav = nav;
+function nav(page) {
+  _origNav(page);
+  if (page === 'shooters') startCheckinWatcher();
+}
+
+// ====================================================
+// NICKNAME MANAGEMENT (Admin → Shooters)
+// ====================================================
+async function clearMemberNickname(mid) {
+  if (!confirm('Clear this member\'s nickname? They will revert to their auto-generated display name.')) return;
+  if (allMembers[mid]) {
+    delete allMembers[mid].nickname;
+    if (db && isFirebaseReady) await db.ref('members/' + mid + '/nickname').remove();
+  }
+  loadMembersList();
+  toast('Nickname cleared', 'success');
+}
+
+// ====================================================
+// CHECK-IN HISTORY TAB
+// ====================================================
+let _ciAllData = {};   // date -> { pushKey: record }
+let _ciFeeData = [];   // flat list for fee reconciliation
+
+function showCISubTab(tab) {
+  document.getElementById('ci-subtab-sessions').style.display = tab === 'sessions' ? 'block' : 'none';
+  document.getElementById('ci-subtab-fees').style.display = tab === 'fees' ? 'block' : 'none';
+  document.getElementById('ci-subtab-btn-sessions').className = tab === 'sessions' ? 'btn btn-red btn-sm' : 'btn btn-outline btn-sm';
+  document.getElementById('ci-subtab-btn-fees').className = tab === 'fees' ? 'btn btn-red btn-sm' : 'btn btn-outline btn-sm';
+  if (tab === 'fees') {
+    initCIFeeYearSel();
+    loadCIFeeData();
+  }
+}
+
+function initCIYearSel() {
+  const sel = document.getElementById('ci-year-sel');
+  if (!sel || sel.options.length > 0) return;
+  const cur = new Date().getFullYear();
+  for (let y = cur; y >= 2024; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y; sel.appendChild(o);
+  }
+}
+
+function initCIFeeYearSel() {
+  const sel = document.getElementById('ci-fee-year-sel');
+  if (!sel || sel.options.length > 0) return;
+  const cur = new Date().getFullYear();
+  for (let y = cur; y >= 2024; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y; sel.appendChild(o);
+  }
+}
+
+async function loadCISessionList() {
+  const sel = document.getElementById('ci-year-sel');
+  if (!sel) return;
+  const year = sel.value;
+  const el = document.getElementById('ci-session-list');
+  el.innerHTML = '<div class="empty-state">Loading...</div>';
+  if (!db || !isFirebaseReady) { el.innerHTML = '<div class="empty-state">Firebase not connected</div>'; return; }
+
+  const snap = await db.ref('checkins').once('value');
+  const all = snap.val() || {};
+  // Filter to selected year
+  const yearDates = Object.keys(all).filter(d => d.startsWith(year)).sort().reverse();
+  _ciAllData = {};
+  yearDates.forEach(d => { _ciAllData[d] = all[d]; });
+
+  if (!yearDates.length) { el.innerHTML = '<div class="empty-state">No check-ins found for ' + year + '</div>'; return; }
+
+  el.innerHTML = yearDates.map(dateKey => {
+    const records = Object.values(all[dateKey] || {});
+    const cash = records.filter(r => r.payment === 'cash').reduce((s, r) => s + (r.feeAmount || 0), 0);
+    const bank = records.filter(r => r.payment === 'bank').reduce((s, r) => s + (r.feeAmount || 0), 0);
+    const display = dateKey.slice(6,8) + '/' + dateKey.slice(4,6) + '/' + dateKey.slice(0,4);
+    return '<div class="card" style="margin-bottom:10px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
+        '<div>' +
+          '<div style="font-family:\'Roboto Condensed\',sans-serif;font-weight:700;font-size:16px">' + display + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + records.length + ' checked in · $' + cash + ' cash · $' + bank + ' bank</div>' +
+        '</div>' +
+        '<button class="btn btn-outline btn-sm" onclick="toggleCIDateDetail('' + dateKey + '')">Show Detail</button>' +
+      '</div>' +
+      '<div id="ci-detail-' + dateKey + '" style="display:none">' + renderCIDateDetail(records) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleCIDateDetail(dateKey) {
+  const el = document.getElementById('ci-detail-' + dateKey);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderCIDateDetail(records) {
+  if (!records.length) return '<div style="color:var(--muted);font-size:13px">No records</div>';
+  records.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  return '<table class="rtable" style="font-size:12px">' +
+    '<thead><tr>' +
+      '<th>Name</th><th>Type</th><th>Activity</th><th>Fee</th><th>Payment</th><th>RO</th><th>Signed</th><th>Time</th>' +
+    '</tr></thead><tbody>' +
+    records.map(r => {
+      const t = r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+      return '<tr>' +
+        '<td><strong>' + (r.displayName || r.firstName || '') + '</strong></td>' +
+        '<td>' + (r.type === 'visitor' ? 'Visitor' : 'Member') + '</td>' +
+        '<td>' + (r.activity === 'practice' ? 'Practice' : 'Event') + '</td>' +
+        '<td>$' + (r.feeAmount || 0) + ' (' + (r.feeType === 'range' ? 'Range' : 'Full') + ')</td>' +
+        '<td>' + (r.payment === 'bank' ? 'Bank' : 'Cash') + '</td>' +
+        '<td>' + (r.roName || '—') + '</td>' +
+        '<td>' + (r.signed ? '✓' : '—') + '</td>' +
+        '<td>' + t + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+}
+
+async function loadCIFeeData() {
+  const sel = document.getElementById('ci-fee-year-sel');
+  if (!sel) return;
+  const year = sel.value;
+  const el = document.getElementById('ci-fee-list');
+  el.innerHTML = '<div class="empty-state">Loading...</div>';
+  if (!db || !isFirebaseReady) { el.innerHTML = '<div class="empty-state">Firebase not connected</div>'; return; }
+
+  const snap = await db.ref('checkins').once('value');
+  const all = snap.val() || {};
+  _ciFeeData = [];
+  Object.keys(all).filter(d => d.startsWith(year)).sort().forEach(dateKey => {
+    Object.values(all[dateKey] || {}).forEach(r => {
+      _ciFeeData.push({ ...r, _dateKey: dateKey });
+    });
+  });
+  renderCIFeeList();
+}
+
+function renderCIFeeList() {
+  const el = document.getElementById('ci-fee-list');
+  const totalsEl = document.getElementById('ci-fee-totals');
+  if (!el) return;
+
+  const filter = (document.getElementById('ci-fee-filter') || {}).value || 'all';
+  const search = ((document.getElementById('ci-fee-search') || {}).value || '').toLowerCase();
+
+  let data = _ciFeeData;
+  if (filter !== 'all') data = data.filter(r => r.payment === filter);
+  if (search) data = data.filter(r => (r.displayName || r.firstName || '').toLowerCase().includes(search) ||
+    ((r.firstName || '') + ' ' + (r.lastName || '')).toLowerCase().includes(search));
+
+  data.sort((a, b) => (a._dateKey || '').localeCompare(b._dateKey || '') || (a.timestamp || 0) - (b.timestamp || 0));
+
+  const cash = data.filter(r => r.payment === 'cash').reduce((s, r) => s + (r.feeAmount || 0), 0);
+  const bank = data.filter(r => r.payment === 'bank').reduce((s, r) => s + (r.feeAmount || 0), 0);
+
+  if (totalsEl) {
+    totalsEl.style.display = 'block';
+    totalsEl.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
+      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Cash</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700;color:var(--green)">$' + cash + '</div></div>' +
+      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Bank</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700;color:var(--accent2)">$' + bank + '</div></div>' +
+      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Total</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700">$' + (cash + bank) + '</div></div>' +
+      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Records</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700">' + data.length + '</div></div>' +
+    '</div>';
+  }
+
+  if (!data.length) { el.innerHTML = '<div class="empty-state">No records found</div>'; return; }
+
+  el.innerHTML = '<div class="card" style="padding:0;overflow:hidden">' +
+    '<table class="rtable">' +
+    '<thead><tr><th>Date</th><th>Name</th><th>Fee</th><th>Payment</th></tr></thead>' +
+    '<tbody>' +
+    data.map(r => {
+      const dk = r._dateKey || '';
+      const display = dk ? dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4) : '';
+      const payStyle = r.payment === 'bank' ? 'color:var(--accent2);font-weight:700' : 'color:var(--green);font-weight:700';
+      return '<tr>' +
+        '<td style="font-family:\'Roboto Mono\',monospace;font-size:11px">' + display + '</td>' +
+        '<td><strong>' + (r.displayName || r.firstName || '') + '</strong></td>' +
+        '<td>$' + (r.feeAmount || 0) + '</td>' +
+        '<td style="' + payStyle + '">' + (r.payment === 'bank' ? '🏦 Bank' : '💵 Cash') + '</td>' +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>';
+}
+
+// ====================================================
+// CHECK-IN EXCEL EXPORTS
+// ====================================================
+async function exportCheckinExcel() {
+  const sel = document.getElementById('ci-year-sel');
+  const year = sel ? sel.value : new Date().getFullYear();
+  if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+
+  const snap = await db.ref('checkins').once('value');
+  const all = snap.val() || {};
+  const yearDates = Object.keys(all).filter(d => d.startsWith(String(year))).sort();
+  if (!yearDates.length) { toast('No check-in data for ' + year, 'error'); return; }
+
+  // Flatten all records
+  const allRecords = [];
+  yearDates.forEach(dk => {
+    Object.values(all[dk] || {}).forEach(r => allRecords.push({ ...r, _dateKey: dk }));
+  });
+  allRecords.sort((a, b) => (a._dateKey || '').localeCompare(b._dateKey || '') || (a.timestamp || 0) - (b.timestamp || 0));
+
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Full check-in log
+  const logRows = [['Date', 'Full Name', 'Display Name', 'Member/Visitor', 'Activity', 'Fee Type', 'Fee Amount', 'Payment', 'RO Name', 'Signed', 'Time']];
+  allRecords.forEach(r => {
+    const dk = r._dateKey || '';
+    const dateStr = dk ? dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4) : '';
+    const timeStr = r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+    logRows.push([
+      dateStr,
+      (r.firstName || '') + ' ' + (r.lastName || ''),
+      r.displayName || r.firstName || '',
+      r.type === 'visitor' ? 'Visitor' : 'Member',
+      r.activity === 'practice' ? 'Practice' : 'Event',
+      r.feeType === 'range' ? 'Range Pass' : 'Full Fee',
+      r.feeAmount || 0,
+      r.payment === 'bank' ? 'Bank Transfer' : 'Cash',
+      r.roName || '',
+      r.signed ? 'Yes' : 'No',
+      timeStr
+    ]);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(logRows);
+  ws1['!cols'] = [{wch:12},{wch:22},{wch:16},{wch:12},{wch:10},{wch:12},{wch:10},{wch:10},{wch:18},{wch:8},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Check-in Log');
+
+  // Sheet 2: Member summary
+  const memberMap = {};
+  allRecords.forEach(r => {
+    if (!r.memberId) return;
+    if (!memberMap[r.memberId]) {
+      memberMap[r.memberId] = {
+        fullName: (r.firstName || '') + ' ' + (r.lastName || ''),
+        displayName: r.displayName || r.firstName || '',
+        days: new Set(), events: 0, practice: 0, cash: 0, bank: 0, total: 0
+      };
+    }
+    const e = memberMap[r.memberId];
+    e.days.add(r._dateKey);
+    if (r.activity === 'practice') e.practice++; else e.events++;
+    if (r.payment === 'bank') e.bank += (r.feeAmount || 0); else e.cash += (r.feeAmount || 0);
+    e.total += (r.feeAmount || 0);
+  });
+  const summaryRows = [['Full Name', 'Display Name', 'Days Attended', 'Events', 'Practice', 'Cash Paid', 'Bank Paid', 'Total Paid']];
+  Object.values(memberMap).sort((a, b) => a.fullName.localeCompare(b.fullName)).forEach(e => {
+    summaryRows.push([e.fullName, e.displayName, e.days.size, e.events, e.practice, e.cash, e.bank, e.total]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(summaryRows);
+  ws2['!cols'] = [{wch:22},{wch:16},{wch:14},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Member Summary');
+
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'SPC-Checkins-' + year + '.xlsx';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Check-in export downloaded!', 'success');
+}
+
+async function exportFeeExcel() {
+  const sel = document.getElementById('ci-fee-year-sel');
+  const year = sel ? sel.value : new Date().getFullYear();
+  const filter = (document.getElementById('ci-fee-filter') || {}).value || 'all';
+
+  let data = _ciFeeData;
+  if (filter !== 'all') data = data.filter(r => r.payment === filter);
+  data.sort((a, b) => (a._dateKey || '').localeCompare(b._dateKey || '') || (a.timestamp || 0) - (b.timestamp || 0));
+
+  if (!data.length) { toast('No data to export', 'error'); return; }
+
+  const wb = XLSX.utils.book_new();
+  const rows = [['Date', 'Name', 'Fee Amount', 'Payment Method']];
+  data.forEach(r => {
+    const dk = r._dateKey || '';
+    const dateStr = dk ? dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4) : '';
+    rows.push([dateStr, r.displayName || r.firstName || '', r.feeAmount || 0, r.payment === 'bank' ? 'Bank Transfer' : 'Cash']);
+  });
+  const cash = data.filter(r => r.payment === 'cash').reduce((s, r) => s + (r.feeAmount || 0), 0);
+  const bank = data.filter(r => r.payment === 'bank').reduce((s, r) => s + (r.feeAmount || 0), 0);
+  rows.push([], ['', 'Cash Total', cash, ''], ['', 'Bank Total', bank, ''], ['', 'Grand Total', cash + bank, '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Fee Reconciliation');
+
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'SPC-Fees-' + year + '.xlsx';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Fee export downloaded!', 'success');
+}
+
+// ====================================================
+// HOOK showAdminTab to init CI year selectors
+// ====================================================
+const _origShowAdminTab = showAdminTab;
+function showAdminTab(tab) {
+  _origShowAdminTab(tab);
+  if (tab === 'attend') {
+    initCIYearSel();
+    initCIFeeYearSel();
+    loadCISessionList();
+  }
+}
+
+// ====================================================
+// HOOK loadMembers to also compute display names
+// ====================================================
+const _origLoadMembers = loadMembers;
+async function loadMembers() {
+  await _origLoadMembers();
+  computeDisplayNames();
+}
+
 </script>
 </body>
 </html>
