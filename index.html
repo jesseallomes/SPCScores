@@ -1540,7 +1540,7 @@ function nav(page) {
   });
   if (page === 'scores') { initScoreMode(); renderScoreCards(); }
   if (page === 'results') renderResults();
-  if (page === 'shooters') loadMembers();
+  if (page === 'shooters') { loadMembers(); startCheckinWatcher(); }
   if (page === 'admin') {
     // Re-lock admin each visit
     document.getElementById('admin-gate').style.display = 'block';
@@ -1560,7 +1560,7 @@ function showAdminTab(tab) {
   if (tab === 'history') loadHistory();
   if (tab === 'annual') { initYearSelector(); loadAnnualRegister(); }
   if (tab === 'members') loadMembersList();
-  if (tab === 'attend') renderAttendance();
+  if (tab === 'attend') { initCIYearSel(); initCIFeeYearSel(); loadCISessionList(); }
   if (tab === 'settings') { loadSettingsUI(); }
 }
 
@@ -1755,6 +1755,7 @@ async function loadMembers() {
   if (!db || !isFirebaseReady) return;
   const snap = await db.ref('members').once('value');
   allMembers = snap.val() || {};
+  computeDisplayNames();
   renderMemberTicklist();
 }
 
@@ -5655,12 +5656,7 @@ async function addAllCheckedInShooters() {
   }
 }
 
-// Start watcher when Registration tab opens — hook into nav()
-const _origNav = nav;
-function nav(page) {
-  _origNav(page);
-  if (page === 'shooters') startCheckinWatcher();
-}
+// checkin watcher started from nav() — patched below via navCheckinHook
 
 // ====================================================
 // NICKNAME MANAGEMENT (Admin → Shooters)
@@ -5960,27 +5956,9 @@ async function exportFeeExcel() {
   toast('Fee export downloaded!', 'success');
 }
 
-// ====================================================
-// HOOK showAdminTab to init CI year selectors
-// ====================================================
-const _origShowAdminTab = showAdminTab;
-function showAdminTab(tab) {
-  _origShowAdminTab(tab);
-  if (tab === 'attend') {
-    initCIYearSel();
-    initCIFeeYearSel();
-    loadCISessionList();
-  }
-}
+// showAdminTab CI init — handled inside showAdminTab directly
 
-// ====================================================
-// HOOK loadMembers to also compute display names
-// ====================================================
-const _origLoadMembers = loadMembers;
-async function loadMembers() {
-  await _origLoadMembers();
-  computeDisplayNames();
-}
+// loadMembers display name hook — handled inside loadMembers directly
 
 </script>
 </body>
