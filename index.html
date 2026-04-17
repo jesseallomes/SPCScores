@@ -933,12 +933,18 @@ table.rtable tr:hover td { background: #fafaf8; }
 <div id="page-scores" class="page">
   <div id="scores-header-bar" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap"></div>
 
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
-    <button class="btn btn-outline btn-sm" onclick="setAllCards(false)" title="Expand all score cards">⊞ All Cards</button>
-    <button class="btn btn-outline btn-sm" onclick="setAllCards(true)" title="Collapse all score cards">⊟ All Cards</button>
-    <div style="width:1px;height:22px;background:var(--border);margin:0 2px"></div>
-    <button class="btn btn-outline btn-sm" onclick="setAllPistols(false)" title="Expand all pistols">&#x229E; All Pistols</button>
-    <button class="btn btn-outline btn-sm" onclick="setAllPistols(true)" title="Collapse all pistols">&#x229F; All Pistols</button>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+    <span style="font-size:11px;font-family:'Roboto Condensed',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted)">Expand:</span>
+    <button id="toggle-cards-btn" onclick="toggleAllCards()"
+      style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;font-family:'Roboto Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);transition:all 0.15s">
+      <span id="toggle-cards-pip" style="width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background 0.15s;flex-shrink:0"></span>
+      Cards
+    </button>
+    <button id="toggle-pistols-btn" onclick="toggleAllPistols()"
+      style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);cursor:pointer;font-family:'Roboto Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--muted);transition:all 0.15s">
+      <span id="toggle-pistols-pip" style="width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background 0.15s;flex-shrink:0"></span>
+      Pistols
+    </button>
   </div>
   <div style="position:relative;margin-bottom:10px" id="score-search-wrap">
     <input type="text" id="score-search" placeholder="Filter shooters..."
@@ -2250,6 +2256,21 @@ function renderScoreCards() {
   }
 
   list.innerHTML = S.shooters.map(s => shooterScoreCard(s)).join('');
+  // Default all new cards/pistols to collapsed if they have no state yet
+  let needsRedraw = false;
+  S.shooters.forEach(s => {
+    if (window._cardCollapsed[s.id] === undefined) {
+      window._cardCollapsed[s.id] = true; needsRedraw = true;
+    }
+    (s.pistols||[]).forEach((_,pi) => {
+      const k = s.id+'-'+pi;
+      if (window._pistolCollapsed[k] === undefined) {
+        window._pistolCollapsed[k] = true; needsRedraw = true;
+      }
+    });
+  });
+  if (needsRedraw) list.innerHTML = S.shooters.map(s => shooterScoreCard(s)).join('');
+  updateExpandToggles();
   wireScoreInputs();
 }
 
@@ -3033,6 +3054,37 @@ function toggleCardCollapse(sid, event) {
   const chev = document.getElementById('scard-chev-' + sid);
   if (body) body.style.display = window._cardCollapsed[sid] ? 'none' : 'block';
   if (chev) chev.textContent = window._cardCollapsed[sid] ? '▶' : '▼';
+}
+
+function updateExpandToggles() {
+  const cardsBtn = document.getElementById('toggle-cards-btn');
+  const cardsPip = document.getElementById('toggle-cards-pip');
+  const pistolsBtn = document.getElementById('toggle-pistols-btn');
+  const pistolsPip = document.getElementById('toggle-pistols-pip');
+  const expanded = window._allCardsExpanded;
+  const pExpanded = window._allPistolsExpanded;
+  if (cardsBtn) {
+    cardsBtn.style.borderColor = expanded ? 'var(--accent2)' : 'var(--border)';
+    cardsBtn.style.color = expanded ? 'var(--accent2)' : 'var(--muted)';
+  }
+  if (cardsPip) cardsPip.style.background = expanded ? 'var(--accent2)' : 'var(--muted)';
+  if (pistolsBtn) {
+    pistolsBtn.style.borderColor = pExpanded ? 'var(--green)' : 'var(--border)';
+    pistolsBtn.style.color = pExpanded ? 'var(--green)' : 'var(--muted)';
+  }
+  if (pistolsPip) pistolsPip.style.background = pExpanded ? 'var(--green)' : 'var(--muted)';
+}
+
+function toggleAllCards() {
+  window._allCardsExpanded = !window._allCardsExpanded;
+  setAllCards(!window._allCardsExpanded);
+  updateExpandToggles();
+}
+
+function toggleAllPistols() {
+  window._allPistolsExpanded = !window._allPistolsExpanded;
+  setAllPistols(!window._allPistolsExpanded);
+  updateExpandToggles();
 }
 
 function setAllCards(collapse) {
@@ -4005,6 +4057,10 @@ async function masterClear() {
   };
   sessionKey = null;
   selectedMemberIds = new Set();
+  window._cardCollapsed = {};
+  window._pistolCollapsed = {};
+  window._allCardsExpanded = false;
+  window._allPistolsExpanded = false;
   // allMembers deliberately NOT cleared — members list is permanent
 
   // Reset setup form
@@ -5013,6 +5069,10 @@ async function loadSessionForEditing(key) {
   S.shooters = data.shooters || [];
   S.scores = data.scores || {};
   S.attendance = data.attendance || {};
+  window._cardCollapsed = {};
+  window._pistolCollapsed = {};
+  window._allCardsExpanded = false;
+  window._allPistolsExpanded = false;
   document.getElementById('header-night').textContent = `${S.title} — ${formatDate(S.date)}`;
 
   syncFormFromState();
