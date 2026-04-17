@@ -487,12 +487,14 @@ function buildResultSection(type, entries) {
   });
 
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
+    const ordA = groups.get(a)[0].ordinal || 1;
+    const ordB = groups.get(b)[0].ordinal || 1;
+    if (ordA !== ordB) return ordA - ordB;
     const baseA = a.replace(/_2nd$|_3rd$|_4th$|_5th$/, '');
     const baseB = b.replace(/_2nd$|_3rd$|_4th$|_5th$/, '');
     const iA = GROUP_ORDER.indexOf(baseA);
     const iB = GROUP_ORDER.indexOf(baseB);
-    if (iA !== iB) return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
-    return a.localeCompare(b);
+    return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
   });
 
   let catRows = '';

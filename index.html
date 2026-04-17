@@ -4549,14 +4549,16 @@ function buildResultSection(type, entries) {
     groups.get(e.catKey).push(e);
   });
 
-  // Sort groups by GROUP_ORDER, then alphabetically for unknowns
+  // Sort groups: ordinal first (all 1sts before all 2nds), then GROUP_ORDER within each ordinal
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
-    const baseA = a.split('_2nd')[0].split('_3rd')[0].split('_4th')[0];
-    const baseB = b.split('_2nd')[0].split('_3rd')[0].split('_4th')[0];
+    const ordA = groups.get(a)[0].ordinal || 1;
+    const ordB = groups.get(b)[0].ordinal || 1;
+    if (ordA !== ordB) return ordA - ordB;
+    const baseA = a.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
+    const baseB = b.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
     const iA = GROUP_ORDER.indexOf(baseA);
     const iB = GROUP_ORDER.indexOf(baseB);
-    if (iA !== iB) return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
-    return a.localeCompare(b);
+    return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
   });
 
   let catRows = '';
@@ -4692,12 +4694,14 @@ function buildScoreSheet(wb, type) {
     groups.get(e.catKey).push(e);
   });
   const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
+    const ordA = groups.get(a)[0].ordinal || 1;
+    const ordB = groups.get(b)[0].ordinal || 1;
+    if (ordA !== ordB) return ordA - ordB;
     const baseA = a.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
     const baseB = b.replace(/_2nd$|_3rd$|_4th$|_5th$/,'');
     const iA = GROUP_ORDER.indexOf(baseA);
     const iB = GROUP_ORDER.indexOf(baseB);
-    if (iA !== iB) return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
-    return a.localeCompare(b);
+    return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
   });
 
   // Build column headers
