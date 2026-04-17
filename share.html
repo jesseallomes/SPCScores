@@ -302,50 +302,64 @@ function getRunData(sid, pi) {
   return result;
 }
 
-// ── Broad group definitions (must match index.html) ──────────────────────────
-const GROUP_ORDER = ['air','rimfire_s','rimfire_m','cf38_pistol_s','cf38_pistol_m','cf38_rev_s','cf38_rev_m','cf38plus_pistol_s','cf38plus_pistol_m','cf38plus_rev_s','cf38plus_rev_m','other'];
+// ── Broad group definitions — kept in sync with index.html ───────────────────
+function calibreToClass(calibre) {
+  if (!calibre) return null;
+  const c = calibre.toLowerCase().replace(/\s/g, '');
+  if (['air', '.177', '177'].includes(c)) return 'c1';
+  if (['.22', '22', '.22lr', '22lr', '.22wmr', '22wmr', '.22mag'].includes(c)) return 'c2';
+  if (['.25', '25', '.25acp',
+       '.32', '32', '.32s&w', '.32sw', '.32h&r', '.32hr',
+       '9mm', '9', '9mmluger', '9mmpara',
+       '.380', '380', '.380acp',
+       '.357sig',
+       '.357', '357', '.357mag', '357mag',
+       '.38', '38', '.38special', '38special', '.38spl',
+       '.38super', '38super',
+       '.38-45', '38-45'].includes(c)) return 'c3';
+  if (['.40', '40', '.40s&w', '.40sw', '40sw',
+       '10mm', '10',
+       '.41', '41', '.41mag', '41mag',
+       '.44', '44', '.44mag', '44mag', '.44special', '44special',
+       '.45', '45', '.45acp', '45acp', '.45lc', '45lc', '.45longcolt',
+       '.50', '50'].includes(c)) return 'c4';
+  const num = parseFloat(c.replace(/[^0-9.]/g, ''));
+  if (!isNaN(num)) {
+    if (num <= 0.177) return 'c1';
+    if (num <= 0.22)  return 'c2';
+    if (num <= 0.38)  return 'c3';
+    return 'c4';
+  }
+  return null;
+}
 
 function getGroupKey(calibre, cls, type) {
-  const c = calibre.toLowerCase().replace(/\s/g,'');
-  const isRev = type === 'R';
-  const isM   = cls === 'M';
-  // Air
-  if (c === 'air' || c === 'airpistol' || c === '.177') return 'air';
-  // Rimfire
-  const rimfireSet = ['.22','22','.22wmr','22wmr','.25','6.35mm'];
-  if (rimfireSet.includes(c)) return isM ? 'rimfire_m' : 'rimfire_s';
-  // CF ≤ .38
-  const cf38Set = ['.32','7.65mm','9mm','9','.356','.357','.38','.380','9mmshort'];
-  if (cf38Set.includes(c)) {
-    if (isRev) return isM ? 'cf38_rev_m' : 'cf38_rev_s';
-    return isM ? 'cf38_pistol_m' : 'cf38_pistol_s';
-  }
-  // CF > .38
-  const co = calibreOrder(calibre);
-  if (co > 0.380 && co < 900) {
-    if (isRev) return isM ? 'cf38plus_rev_m' : 'cf38plus_rev_s';
-    return isM ? 'cf38plus_pistol_m' : 'cf38plus_pistol_s';
-  }
-  return 'other';
+  const ssaa = calibreToClass(calibre);
+  if (ssaa === 'c1') return 'air';
+  if (ssaa === 'c2') return `rimfire_${cls}`;
+  if (ssaa === 'c3') return `cf38_${type}_${cls}`;
+  if (ssaa === 'c4') return `cf40_${type}_${cls}`;
+  return `other_${type}_${cls}`;
 }
 
-function getGroupLabel(key) {
+function getGroupLabel(groupKey) {
   const map = {
-    air:              'Air Pistol',
-    rimfire_s:        'Rimfire — Standard',
-    rimfire_m:        'Rimfire — Modified',
-    cf38_pistol_s:    'CF ≤.38 Pistol — Standard',
-    cf38_pistol_m:    'CF ≤.38 Pistol — Modified',
-    cf38_rev_s:       'CF ≤.38 Revolver — Standard',
-    cf38_rev_m:       'CF ≤.38 Revolver — Modified',
-    cf38plus_pistol_s:'CF >.38 Pistol — Standard',
-    cf38plus_pistol_m:'CF >.38 Pistol — Modified',
-    cf38plus_rev_s:   'CF >.38 Revolver — Standard',
-    cf38plus_rev_m:   'CF >.38 Revolver — Modified',
-    other:            'Other',
+    'air':       'Air',
+    'rimfire_S': 'Rimfire — Standard',
+    'rimfire_M': 'Rimfire — Modified',
+    'cf38_P_S':  'Centrefire ≤.38 Pistol — Standard',
+    'cf38_P_M':  'Centrefire ≤.38 Pistol — Modified',
+    'cf38_R_S':  'Centrefire ≤.38 Revolver — Standard',
+    'cf38_R_M':  'Centrefire ≤.38 Revolver — Modified',
+    'cf40_P_S':  'Centrefire >.38 Pistol — Standard',
+    'cf40_P_M':  'Centrefire >.38 Pistol — Modified',
+    'cf40_R_S':  'Centrefire >.38 Revolver — Standard',
+    'cf40_R_M':  'Centrefire >.38 Revolver — Modified',
   };
-  return map[key] || key;
+  return map[groupKey] || groupKey;
 }
+
+const GROUP_ORDER = ['air','rimfire_S','rimfire_M','cf38_P_S','cf38_P_M','cf38_R_S','cf38_R_M','cf40_P_S','cf40_P_M','cf40_R_S','cf40_R_M'];
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getAllEntries(type) {
@@ -465,17 +479,26 @@ function buildResultSection(type, entries) {
   const top5 = scoringEntries.slice(0, 5);
   const overallRows = top5.map((e, i) => resultRow(e, i, isSteel, runs)).join('');
 
-  // By broad group
-  const catSorted = sortedByCategory(entries);
+  // By broad group — sort groups by GROUP_ORDER
   const groups = new Map();
-  catSorted.forEach(e => {
+  entries.forEach(e => {
     if (!groups.has(e.catKey)) groups.set(e.catKey, []);
     groups.get(e.catKey).push(e);
   });
 
+  const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
+    const baseA = a.replace(/_2nd$|_3rd$|_4th$|_5th$/, '');
+    const baseB = b.replace(/_2nd$|_3rd$|_4th$|_5th$/, '');
+    const iA = GROUP_ORDER.indexOf(baseA);
+    const iB = GROUP_ORDER.indexOf(baseB);
+    if (iA !== iB) return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB);
+    return a.localeCompare(b);
+  });
+
   let catRows = '';
   let lastOrdinal = null;
-  groups.forEach((items, key) => {
+  sortedGroupKeys.forEach(key => {
+    const items = groups.get(key);
     const ordinal = items[0].ordinal || 1;
     if (ordinal !== lastOrdinal) {
       lastOrdinal = ordinal;
@@ -486,7 +509,8 @@ function buildResultSection(type, entries) {
     }
     const sortedItems = [...items].sort((a,b) => isSteel ? a.score - b.score : b.score.total - a.score.total);
     const totalCols = isSteel ? runs + 5 : 5;
-    const groupLabel = getGroupLabel(items[0].groupKey);
+    const baseKey = key.replace(/_2nd$|_3rd$|_4th$|_5th$/, '');
+    const groupLabel = getGroupLabel(baseKey);
     catRows += `<tr class="cat-row"><td colspan="${totalCols}">${groupLabel}</td></tr>`;
     sortedItems.forEach((e, i) => { catRows += resultRow(e, i, isSteel, runs); });
   });
@@ -564,7 +588,8 @@ function buildScoreSheet(wb, type) {
 
     rows.push(Array(numCols).fill(''));  // blank before category
     // Category heading row (broad group label)
-    rows.push([getGroupLabel(items[0].groupKey), ...Array(numCols-1).fill('')]);
+    const baseKey = key.replace(/_2nd$|_3rd$|_4th$|_5th$/, '');
+    rows.push([getGroupLabel(baseKey), ...Array(numCols-1).fill('')]);
     boldRows.add(rows.length-1); mergeRows.add(rows.length-1);
 
     // Column headers
