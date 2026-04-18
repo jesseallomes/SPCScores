@@ -5707,10 +5707,8 @@ function syncCheckinRemovals() {
   });
   var removed = before - S.shooters.length;
   if (removed) {
-    // Clean up scores/attendance for removed shooters
-    var keepIds = new Set(S.shooters.map(function(s) { return s.id; }));
-    Object.keys(S.scores).forEach(function(sid) { if (!keepIds.has(sid)) delete S.scores[sid]; });
-    Object.keys(S.attendance).forEach(function(sid) { if (!keepIds.has(sid)) delete S.attendance[sid]; });
+    // Keep scores/attendance in memory (don't delete from Firebase)
+    // so they restore if the shooter is re-added via check-in
     syncToFirebase();
   }
   return removed;
