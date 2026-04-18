@@ -118,6 +118,16 @@ input[type=text]::placeholder { color: #bbb; }
 .spinner { width: 28px; height: 28px; border: 3px solid #ddd; border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* CONFIRM SCREEN */
+.confirm-screen { text-align: center; padding: 30px 20px; }
+.confirm-icon { font-size: 64px; margin-bottom: 16px; }
+.confirm-title { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--green); margin-bottom: 8px; }
+.confirm-name { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.confirm-detail { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 24px; }
+.confirm-actions { display: flex; flex-direction: column; gap: 10px; max-width: 320px; margin: 0 auto; }
+.btn-live { width: 100%; padding: 13px; border: none; border-radius: 8px; background: var(--blue); color: white; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; cursor: pointer; }
+.btn-again { width: 100%; padding: 13px; border: 2px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; cursor: pointer; }
+
 /* TOAST */
 #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #1c2b3a; color: white; padding: 10px 20px; border-radius: 20px; font-size: 13px; font-weight: 600; z-index: 999; transition: transform 0.3s; white-space: nowrap; pointer-events: none; }
 #toast.show { transform: translateX(-50%) translateY(0); }
@@ -224,8 +234,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Load members
-  db.ref('members').once('value', snap => {
+  // Live members listener — stays current when admin edits names
+  db.ref('members').on('value', snap => {
     members = snap.val() || {};
     computeDisplayNames();
     roMembers = Object.values(members).filter(m => m.isRO);
@@ -814,9 +824,11 @@ async function submitCheckin() {
       timestamp: Date.now()
     };
 
-    await db.ref('checkins/' + todayKey).push(record);
-    // Write to currentCheckins for index.html Registration tab
-    await db.ref('currentCheckins/' + memberId).set(record);
+    // Write both in parallel for speed
+    await Promise.all([
+      db.ref('checkins/' + todayKey).push(record),
+      db.ref('currentCheckins/' + memberId).set(record)
+    ]);
 
     showConfirm(record);
 
