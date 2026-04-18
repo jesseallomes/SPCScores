@@ -2414,7 +2414,7 @@ function shooterScoreCard(s) {
     <div class="scard-header" style="cursor:pointer" onclick="toggleCardCollapse('${s.id}',event)">
       <div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span onclick="event.stopPropagation();removeShooter('${s.id}')" title="Remove shooter"
+          <span onclick="event.stopPropagation();removeShooter('${s.id}','${s.memberId}')" title="Remove shooter"
             style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(200,55,45,0.15);color:var(--accent);font-size:13px;cursor:pointer;flex-shrink:0;font-weight:700;line-height:1">✕</span>
           <div class="scard-name">${getDisplayName(s)} ${roBadge} ${visBadge}</div>
         </div>
@@ -5647,8 +5647,17 @@ async function installPWA() {
 }
 
 // Hide banner if already installed
-function removeShooter(sid) {
-  if (!confirm('Remove this shooter from tonight\'s session?')) return;
+function removeShooter(sid, memberId) {
+  // Block removal if shooter has a confirmed check-in
+  if (memberId && _currentCheckins[memberId] && !_currentCheckins[memberId].pending) {
+    toast('Cannot remove - shooter has checked in', 'error');
+    return;
+  }
+  if (!confirm('Remove this shooter from tonight' + String.fromCharCode(39) + 's session?')) return;
+  // Clear temp/pending currentCheckins record if present
+  if (memberId && _currentCheckins[memberId] && _currentCheckins[memberId].pending) {
+    if (db && isFirebaseReady) db.ref('currentCheckins/' + memberId).remove();
+  }
   S.shooters = S.shooters.filter(s => s.id !== sid);
   delete S.scores[sid];
   delete S.attendance[sid];
