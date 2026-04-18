@@ -802,7 +802,7 @@ async function submitCheckinFast() {
     const existing = await db.ref('currentCheckins/' + formState.memberId).once('value');
     if (existing.val()) {
       const d = new Date().toLocaleDateString('en-AU', {day:'numeric', month:'long', year:'numeric'});
-      toast('Already checked in for ' + d, 'error');
+      showAlreadyCheckedIn(d);
       pinEntry = '';
       updatePinDots();
       return;
@@ -942,6 +942,36 @@ async function savePinToMember(memberId, pin) {
   }
 }
 
+// --- ALREADY CHECKED IN POPUP ---
+function showAlreadyCheckedIn(dateStr) {
+  var el = document.getElementById('already-checkin-popup');
+  if (el) el.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'already-checkin-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:white;border-radius:12px;padding:28px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  var icon = document.createElement('div');
+  icon.style.cssText = 'font-size:52px;margin-bottom:12px';
+  icon.textContent = '✅';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-weight:800;font-size:24px;text-transform:uppercase;letter-spacing:1px;color:var(--green);margin-bottom:10px';
+  title.textContent = 'Already Checked In';
+  var msg = document.createElement('div');
+  msg.style.cssText = 'font-size:15px;color:var(--text);margin-bottom:24px;line-height:1.5';
+  msg.innerHTML = 'You have already checked in for<br><strong>' + dateStr + '</strong>';
+  var btn = document.createElement('button');
+  btn.style.cssText = 'width:100%;padding:14px;border:none;border-radius:8px;background:var(--accent);color:white;font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;cursor:pointer';
+  btn.textContent = '← Back to Check-In';
+  btn.onclick = function() { overlay.remove(); renderForm(); };
+  box.appendChild(icon);
+  box.appendChild(title);
+  box.appendChild(msg);
+  box.appendChild(btn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
 // --- PENDING COMPLETION ---
 function showPendingCompletion(memberId, pendingRecord) {
   const m = members[memberId];
@@ -995,7 +1025,7 @@ async function submitCheckin() {
       const existing = await db.ref('currentCheckins/' + memberId).once('value');
       if (existing.val()) {
         const d = new Date().toLocaleDateString('en-AU', {day:'numeric', month:'long', year:'numeric'});
-        toast('Already checked in for ' + d, 'error');
+        showAlreadyCheckedIn(d);
         btn.disabled = false;
         btn.textContent = '✓ CHECK IN';
         return;
@@ -1029,6 +1059,11 @@ async function submitCheckin() {
       if (m.feePreference !== formState.feeType) updates.feePreference = formState.feeType;
       updates.lastActivity = formState.activity;
       updates.lastPayment = formState.payment;
+      // Auto-convert visitor to member if they selected Member type
+      if (m.isVisitor && formState.type === 'member') {
+        updates.isVisitor = false;
+        members[memberId].isVisitor = false;
+      }
       // Save nickname if chosen
       if (formState.chosenNickname && formState.nickname) {
         updates.nickname = formState.nickname;

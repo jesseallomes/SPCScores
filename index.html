@@ -750,7 +750,7 @@ table.rtable tr:hover td { background: #fafaf8; }
 
 <div class="nav-tabs">
   <button class="nav-tab active" onclick="nav('setup')">⚙ Comp Setup</button>
-  <button class="nav-tab" onclick="nav('shooters')">👤 Registration</button>
+  <button class="nav-tab" onclick="nav('shooters')" id="tab-shooters" style="display:none">👤 Registration</button>
   <button class="nav-tab" onclick="nav('scores')">📝 Score Entry</button>
   <button class="nav-tab" onclick="nav('results')">🏆 Results</button>
   <button class="nav-tab" onclick="nav('admin')">🔐 Admin</button>
@@ -1468,6 +1468,7 @@ try {
         db.ref('currentSession').set(sessionKey);
       }
       initPistolMakes();
+      startCheckinWatcher();
     } else {
       badge.textContent = 'OFFLINE';
       badge.className = 'sync-badge err';
@@ -1556,7 +1557,7 @@ function nav(page) {
   });
   if (page === 'scores') { initScoreMode(); renderScoreCards(); }
   if (page === 'results') renderResults();
-  if (page === 'shooters') { loadMembers(); startCheckinWatcher(); }
+  if (page === 'shooters') { loadMembers(); }
   if (page === 'admin') {
     // Re-lock admin each visit
     document.getElementById('admin-gate').style.display = 'block';
@@ -1727,8 +1728,11 @@ function saveSetupAndGo() {
   // Update currentSession pointer so live.html follows this session
   if (db && isFirebaseReady) {
     db.ref('currentSession').set(sessionKey);
+    // Archive currentCheckins for previous day if date has changed, then clear
+    archiveAndClearCheckins(S.date);
   }
-  nav('shooters');
+  startCheckinWatcher();
+  nav('scores');
   toast('Setup saved!', 'success');
 }
 
@@ -4267,6 +4271,7 @@ async function masterClear() {
   // Members list and history (sessions) are NEVER cleared by master clear
   if (db && isFirebaseReady) {
     await db.ref('annual').remove();
+    await db.ref('checkins').remove();
     await db.ref('currentCheckins').remove();
     await db.ref('currentSession').remove();
   }
@@ -5511,6 +5516,7 @@ window.addEventListener('load', () => {
       if (isFirebaseReady) {
         loadMembers();
         loadSettings();
+        startCheckinWatcher();
       }
     }, 800);
   }
@@ -5728,6 +5734,33 @@ function saveFeeSettings() {
 var _checkinWatcherOn = false;
 var _currentCheckins = {};
 
+function archiveAndClearCheckins(sessionDate) {
+  if (!db || !isFirebaseReady) return;
+  db.ref('currentCheckins').once('value', function(snap) {
+    var data = snap.val();
+    if (!data) return;
+    // Determine the date key of the current checkins
+    var entries = Object.values(data);
+    if (!entries.length) return;
+    // Use timestamp of first entry to get date key, or today
+    var firstTs = entries[0].timestamp || Date.now();
+    var d = new Date(firstTs);
+    var dk = d.getFullYear().toString() +
+      String(d.getMonth()+1).padStart(2,'0') +
+      String(d.getDate()).padStart(2,'0');
+    // Only archive if date differs from current session date
+    var sessionDk = (sessionDate || '').replace(/-/g, '');
+    if (dk === sessionDk) return; // same day, don't archive
+    // Archive each entry
+    var writes = entries.map(function(ci) {
+      return db.ref('checkins/' + dk).push(ci);
+    });
+    Promise.all(writes).then(function() {
+      db.ref('currentCheckins').remove();
+    });
+  });
+}
+
 function startCheckinWatcher() {
   if (_checkinWatcherOn || !db || !isFirebaseReady) return;
   _checkinWatcherOn = true;
@@ -5753,10 +5786,18 @@ function autoAddCheckedInShooters() {
   var existingIds = new Set(S.shooters.map(function(s) { return s.memberId; }).filter(Boolean));
   var added = 0;
   entries.forEach(function(ci) {
-    // Only auto-add fully checked-in shooters (not pending/temp records)
-    if (!ci.memberId || ci.pending || existingIds.has(ci.memberId)) return;
+    // Skip temp/pending records — they never create score cards
+    if (!ci.memberId || ci.pending) return;
+    // Skip if already on score page (confirmed or manually added)
+    if (existingIds.has(ci.memberId)) return;
     var m = allMembers[ci.memberId];
-    if (!m) return;
+    if (!m) {
+      // Member not in allMembers yet — create minimal entry from checkin data
+      m = { id: ci.memberId, firstName: ci.firstName, lastName: ci.lastName,
+            displayName: ci.displayName || ci.firstName,
+            isRO: ci.isRO || false, isVisitor: ci.type === 'visitor' };
+      allMembers[ci.memberId] = m;
+    }
     var shooter = {
       id: newId(), memberId: m.id,
       firstName: m.firstName, lastName: m.lastName,
