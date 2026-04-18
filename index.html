@@ -1176,6 +1176,22 @@ table.rtable tr:hover td { background: #fafaf8; }
     <!-- Danger zone sub-page -->
     <div id="admin-tab-danger" class="admin-sub-page" style="display:none">
       <div class="section-head">🗑 Danger Zone</div>
+
+      <div class="card" style="border:2px solid var(--accent2)">
+        <div class="card-title" style="color:var(--accent2)">💾 Backup &amp; Restore</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">
+          Backup exports all data (members, pistols, sessions, scores, settings, check-ins) to a JSON file.<br>
+          Restore <strong>fully overwrites</strong> all Firebase data with the backup file.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-blue" onclick="backupAllData()">📥 Download Backup</button>
+          <label class="btn btn-outline" style="cursor:pointer;margin:0">
+            📤 Restore from Backup
+            <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="restoreFromBackup(this)">
+          </label>
+        </div>
+      </div>
+
       <div class="card" style="border:2px solid var(--accent)">
         <div class="card-title" style="color:var(--accent)">⚠ Master Clear</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
@@ -4174,6 +4190,72 @@ function formatDateDMY(isoDate) {
 }
 
 // ====================================================
+// BACKUP & RESTORE
+// ====================================================
+async function backupAllData() {
+  if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+  toast('Building backup...', 'success');
+  try {
+    var nodes = ['config', 'members', 'sessions', 'shares', 'annual', 'checkins', 'currentCheckins', 'currentSession'];
+    var backup = { _backupDate: new Date().toISOString(), _version: 1 };
+    var snaps = await Promise.all(nodes.map(function(node) {
+      return db.ref(node).once('value');
+    }));
+    nodes.forEach(function(node, i) { backup[node] = snaps[i].val(); });
+    var json = JSON.stringify(backup, null, 2);
+    var blob = new Blob([json], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'SPC-Backup-' + new Date().toISOString().split('T')[0] + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Backup downloaded!', 'success');
+  } catch(e) {
+    toast('Backup failed: ' + e.message, 'error');
+  }
+}
+
+async function restoreFromBackup(input) {
+  var file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+  if (!confirm('This will COMPLETELY WIPE all Firebase data and replace it with the backup. This cannot be undone. Are you sure?')) return;
+
+  var reader = new FileReader();
+  reader.onload = async function(e) {
+    var data;
+    try { data = JSON.parse(e.target.result); } catch(err) { toast('Invalid backup file', 'error'); return; }
+    if (!data._version) { toast('Not a valid SPC backup file', 'error'); return; }
+
+    try {
+      toast('Wiping existing data...', 'success');
+      // Wipe all nodes
+      var nodes = ['config', 'members', 'sessions', 'shares', 'annual', 'checkins', 'currentCheckins', 'currentSession'];
+      await Promise.all(nodes.map(function(node) { return db.ref(node).remove(); }));
+
+      // Restore each node
+      toast('Restoring backup...', 'success');
+      var writes = [];
+      nodes.forEach(function(node) {
+        if (data[node] !== null && data[node] !== undefined) {
+          writes.push(db.ref(node).set(data[node]));
+        }
+      });
+      await Promise.all(writes);
+      toast('Restore complete! Reloading...', 'success');
+      setTimeout(function() { window.location.reload(); }, 1500);
+    } catch(err) {
+      toast('Restore failed: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ====================================================
 // MASTER CLEAR
 // ====================================================
 async function masterClear() {
@@ -4185,6 +4267,8 @@ async function masterClear() {
   // Members list and history (sessions) are NEVER cleared by master clear
   if (db && isFirebaseReady) {
     await db.ref('annual').remove();
+    await db.ref('currentCheckins').remove();
+    await db.ref('currentSession').remove();
   }
 
   // Reset local state
@@ -5945,8 +6029,14 @@ function renderCIFeeList() {
 function deleteCIFeeRecord(dk, pk) {
   if (!confirm('Delete this check-in record permanently? This cannot be undone.')) return;
   if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+  // Find the memberId before deleting so we can clear currentCheckins too
+  var record = _ciFeeData.find(function(r) { return r._dk === dk && r._key === pk; });
   db.ref('checkins/' + dk + '/' + pk).remove(function(err) {
     if (err) { toast('Delete failed', 'error'); return; }
+    // Also clear currentCheckins so they can check in again
+    if (record && record.memberId) {
+      db.ref('currentCheckins/' + record.memberId).remove();
+    }
     // Remove from local cache
     _ciFeeData = _ciFeeData.filter(function(r) { return !(r._dk === dk && r._key === pk); });
     renderCIFeeList();
