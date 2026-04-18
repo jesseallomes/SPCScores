@@ -3931,7 +3931,18 @@ let CFG = {
 // Apply theme immediately from phone preference before Firebase loads
 (function() {
   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  if (prefersDark) document.documentElement.setAttribute('data-theme', 'dark');
+  if (prefersDark) {
+    var r = document.documentElement;
+    r.style.setProperty('--bg', '#0e0e0f');
+    r.style.setProperty('--white', '#18181b');
+    r.style.setProperty('--card', '#1e1e22');
+    r.style.setProperty('--text', '#e8e8ea');
+    r.style.setProperty('--border', '#2a2a2e');
+    r.style.setProperty('--input-bg', '#1a1a1e');
+    r.style.setProperty('--muted', '#8888a0');
+    r.style.setProperty('--panel', '#0d1b26');
+    r.style.setProperty('--panel2', '#122030');
+  }
 })();
 
 async function loadSettings() {
@@ -3939,10 +3950,8 @@ async function loadSettings() {
   const snap = await db.ref('config').once('value');
   const data = snap.val();
   if (data) {
-    // Preserve clubGuns if not in Firebase data
-    const savedGuns = data.clubGuns || CFG.clubGuns || [];
     CFG = { ...CFG, ...data };
-    CFG.clubGuns = savedGuns;
+    if (!CFG.clubGuns) CFG.clubGuns = [];
   }
   applyTheme(CFG.theme);
   // Listen for config changes (theme + clubGuns sync)
@@ -3955,7 +3964,7 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-  if (db && isFirebaseReady) await db.ref('config').set(CFG);
+  if (db && isFirebaseReady) await db.ref('config').update(CFG);
 }
 
 // checkSettingsPassword replaced by checkAdminPassword
@@ -5185,8 +5194,10 @@ function debouncedRenderScoreCards() {
   }, 120);
 }
 
+var _localWriteTs = 0;
 function syncToFirebase() {
   if (!db || !isFirebaseReady || !sessionKey) return Promise.resolve();
+  _localWriteTs = Date.now();
   return db.ref(`sessions/${sessionKey}`).set({
     meta: { date: S.date, title: S.title, ro: S.ro, emailTo: S.emailTo,
             steel: S.steel, paper: S.paper, updated: Date.now() },
@@ -5218,7 +5229,8 @@ function listenSession() {
     }
     const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
     if (activePage === 'scores') {
-      debouncedRenderScoreCards();
+      const isSelfWrite = (Date.now() - _localWriteTs) < 1500;
+      if (!isSelfWrite) debouncedRenderScoreCards();
     }
     if (activePage === 'results') renderResults();
     if (activePage === 'attend') renderAttendance();
@@ -5559,13 +5571,16 @@ window.addEventListener('load', () => {
   if (window.location.search.includes('share=')) {
     checkShareMode();
   } else {
-    setTimeout(() => {
+    // Wait for Firebase to be ready before loading settings/members
+    var _initWait = setInterval(function() {
       if (isFirebaseReady) {
+        clearInterval(_initWait);
         loadMembers();
         loadSettings();
         startCheckinWatcher();
       }
-    }, 800);
+    }, 200);
+    setTimeout(function() { clearInterval(_initWait); }, 10000);
   }
   // Year selector initialised when Annual tab opens
 });
