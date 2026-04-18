@@ -1555,15 +1555,31 @@ function nav(page) {
   document.querySelectorAll('.nav-tab').forEach(t => {
     if (t.getAttribute('onclick') && t.getAttribute('onclick').includes(`'${page}'`)) t.classList.add('active');
   });
-  if (page === 'scores') { initScoreMode(); renderScoreCards(); }
+  if (page === 'scores') {
+    initScoreMode();
+    renderScoreCards();
+    resumeSessionListener();
+    attachScorePageFocusHandlers();
+  } else {
+    pauseSessionListener();
+  }
   if (page === 'results') renderResults();
   if (page === 'shooters') { loadMembers(); }
   if (page === 'admin') {
-    // Re-lock admin each visit
     document.getElementById('admin-gate').style.display = 'block';
     document.getElementById('admin-content').style.display = 'none';
     document.getElementById('admin-pw-input').value = '';
   }
+}
+
+function attachScorePageFocusHandlers() {
+  // Pause listener when any input on score page is focused
+  const scorePage = document.getElementById('page-scores');
+  if (!scorePage) return;
+  scorePage.querySelectorAll('input, select, textarea').forEach(function(el) {
+    el.addEventListener('focus', pauseSessionListener, { once: false });
+    el.addEventListener('blur', resumeSessionListener, { once: false });
+  });
 }
 
 function showAdminTab(tab) {
@@ -2384,6 +2400,7 @@ function renderScoreCards() {
   if (needsRedraw) list.innerHTML = S.shooters.map(s => shooterScoreCard(s)).join('');
   updateExpandToggles();
   wireScoreInputs();
+  attachScorePageFocusHandlers();
 }
 
 function shooterScoreCard(s) {
@@ -3914,21 +3931,7 @@ let CFG = {
 // Apply theme immediately from phone preference before Firebase loads
 (function() {
   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  CFG.theme = 'auto';
-  // Will be properly applied via applyTheme once function is defined - 
-  // set CSS vars directly here for instant render
-  if (prefersDark) {
-    var r = document.documentElement;
-    r.style.setProperty('--bg', '#0e0e0f');
-    r.style.setProperty('--white', '#18181b');
-    r.style.setProperty('--card', '#1e1e22');
-    r.style.setProperty('--text', '#e8e8ea');
-    r.style.setProperty('--border', '#2a2a2e');
-    r.style.setProperty('--input-bg', '#1a1a1e');
-    r.style.setProperty('--muted', '#8888a0');
-    r.style.setProperty('--panel', '#0d1b26');
-    r.style.setProperty('--panel2', '#122030');
-  }
+  if (prefersDark) document.documentElement.setAttribute('data-theme', 'dark');
 })();
 
 async function loadSettings() {
@@ -3936,8 +3939,10 @@ async function loadSettings() {
   const snap = await db.ref('config').once('value');
   const data = snap.val();
   if (data) {
+    // Preserve clubGuns if not in Firebase data
+    const savedGuns = data.clubGuns || CFG.clubGuns || [];
     CFG = { ...CFG, ...data };
-    if (!CFG.clubGuns) CFG.clubGuns = [];
+    CFG.clubGuns = savedGuns;
   }
   applyTheme(CFG.theme);
   // Listen for config changes (theme + clubGuns sync)
@@ -3950,7 +3955,7 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-  if (db && isFirebaseReady) await db.ref('config').update(CFG);
+  if (db && isFirebaseReady) await db.ref('config').set(CFG);
 }
 
 // checkSettingsPassword replaced by checkAdminPassword
@@ -5177,13 +5182,11 @@ function debouncedRenderScoreCards() {
   _renderScoreCardsTimer = setTimeout(function() {
     _renderScoreCardsTimer = null;
     renderScoreCards();
-  }, 400);
+  }, 120);
 }
 
-var _localWriteTs = 0;
 function syncToFirebase() {
   if (!db || !isFirebaseReady || !sessionKey) return Promise.resolve();
-  _localWriteTs = Date.now();
   return db.ref(`sessions/${sessionKey}`).set({
     meta: { date: S.date, title: S.title, ro: S.ro, emailTo: S.emailTo,
             steel: S.steel, paper: S.paper, updated: Date.now() },
@@ -5193,9 +5196,16 @@ function syncToFirebase() {
   }).catch(err => console.warn('Sync failed:', err));
 }
 
+var _sessionListenerActive = false;
+var _sessionListenerPaused = false;
+
 function listenSession() {
   if (!db || !sessionKey) return;
+  // Already listening — don't add duplicate listener
+  if (_sessionListenerActive) return;
+  _sessionListenerActive = true;
   db.ref(`sessions/${sessionKey}`).on('value', snap => {
+    if (_sessionListenerPaused) return;
     const data = snap.val();
     if (!data) return;
     S.shooters = data.shooters || [];
@@ -5208,20 +5218,21 @@ function listenSession() {
     }
     const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
     if (activePage === 'scores') {
-      // Don't re-render if this was triggered by our own write (within 1.5s)
-      const isSelfWrite = (Date.now() - _localWriteTs) < 1500;
-      if (!isSelfWrite) {
-        const focused = document.activeElement;
-        const isTyping = focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA');
-        if (!isTyping) debouncedRenderScoreCards();
-      }
+      debouncedRenderScoreCards();
     }
     if (activePage === 'results') renderResults();
     if (activePage === 'attend') renderAttendance();
-    // Always update results quietly in background for live sync indicator
     document.getElementById('sync-badge').textContent = 'LIVE SYNC ON';
     document.getElementById('sync-badge').className = 'sync-badge ok';
   });
+}
+
+function pauseSessionListener() {
+  _sessionListenerPaused = true;
+}
+
+function resumeSessionListener() {
+  _sessionListenerPaused = false;
 }
 
 // ====================================================

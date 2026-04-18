@@ -113,40 +113,6 @@ input[type=text]::placeholder { color: #bbb; }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
 .empty-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.4; }
 
-/* PIN SCREEN */
-.pin-screen { text-align: center; padding: 10px 0; }
-.pin-title { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
-.pin-subtitle { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-.pin-display { display: flex; gap: 14px; justify-content: center; margin: 18px 0 14px; }
-.pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); background: white; transition: all 0.15s; }
-.pin-dot.filled { background: var(--blue); border-color: var(--blue); }
-.pin-dot.error { background: var(--accent); border-color: var(--accent); animation: shake 0.3s; }
-@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-.pin-error { font-size: 13px; color: var(--accent); font-weight: 600; min-height: 18px; margin-bottom: 10px; }
-.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 260px; margin: 0 auto 12px; }
-.pin-key { padding: 16px 10px; border-radius: 8px; border: 1.5px solid var(--border); background: white; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; text-align: center; cursor: pointer; transition: background 0.1s, transform 0.08s; -webkit-user-select: none; user-select: none; }
-.pin-key:active { background: var(--blue); color: white; transform: scale(0.93); }
-.pin-key.key-wide { grid-column: span 2; }
-.pin-key.key-del { font-size: 16px; color: var(--muted); }
-.pin-forgot { font-size: 13px; color: var(--blue); text-decoration: underline; cursor: pointer; margin-top: 4px; display: inline-block; }
-
-/* CONFIRMATION */
-.confirm-screen { text-align: center; padding: 30px 20px 10px; }
-.confirm-icon { font-size: 64px; margin-bottom: 12px; animation: pop 0.4s cubic-bezier(0.175,0.885,0.32,1.275); }
-@keyframes pop { 0%{transform:scale(0.2);opacity:0} 100%{transform:scale(1);opacity:1} }
-.confirm-title { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--green); margin-bottom: 6px; }
-.confirm-name { font-size: 19px; font-weight: 700; margin-bottom: 4px; }
-.confirm-detail { font-size: 14px; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
-.btn-live { width: 100%; padding: 14px; border: none; border-radius: 8px; background: var(--blue); color: white; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; cursor: pointer; margin-bottom: 8px; }
-.btn-again { width: 100%; padding: 12px; border: 2px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
-
-/* PIN SETUP */
-.setup-card { background: #f0f6ff; border: 1.5px solid var(--blue); border-radius: 8px; padding: 14px; margin-top: 12px; }
-.setup-card-title { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--blue); margin-bottom: 6px; }
-.setup-card p { font-size: 13px; color: #444; margin-bottom: 10px; line-height: 1.4; }
-.btn-setup-pin { padding: 10px 18px; border: none; border-radius: 6px; background: var(--blue); color: white; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
-.btn-skip { padding: 10px 18px; border: 1.5px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; margin-left: 8px; }
-
 /* LOADING */
 .loading { text-align: center; padding: 40px 20px; color: var(--muted); }
 .spinner { width: 28px; height: 28px; border: 3px solid #ddd; border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 12px; }
@@ -183,7 +149,6 @@ input[type=text]::placeholder { color: #bbb; }
 <!-- CHECK IN TAB -->
 <div id="tab-checkin" class="page active">
   <div id="view-form"><!-- form rendered here --></div>
-  <div id="view-pin" style="display:none;"></div>
   <div id="view-confirm" style="display:none;"></div>
 </div>
 
@@ -243,10 +208,6 @@ let formState = {
   nickname: '',
   chosenNickname: false
 };
-let pinEntry = '';
-let pinMode = '';        // 'verify' | 'setup' | 'setup2'
-let pinFirst = '';       // first entry when setting up PIN
-let postCheckinMemberId = null;
 
 // --- INIT ---
 window.addEventListener('DOMContentLoaded', async () => {
@@ -377,13 +338,11 @@ function resetFormState() {
     isRO: false, roId: sessionRO ? sessionRO.id : null,
     signed: false, nickname: '', chosenNickname: false
   };
-  pinEntry = '';
 }
 
 function renderForm() {
   resetFormState();
   document.getElementById('view-form').style.display = '';
-  document.getElementById('view-pin').style.display = 'none';
   document.getElementById('view-confirm').style.display = 'none';
 
   const feeFullLabel = 'Full Fee — $' + fees.full;
@@ -528,20 +487,20 @@ function selectMember(id) {
   formState.type = m.isVisitor ? 'visitor' : 'member';
   formState.nickname = m.nickname || '';
 
-  // Fee preference
-  if (m.feePreference === 'range') {
-    formState.feeType = 'range';
-    setFee('range');
-  } else {
-    formState.feeType = 'full';
-    setFee('full');
-  }
-
-  // Type buttons
+  // Pre-fill from last used settings
+  formState.feeType = m.feePreference || 'full';
+  setFee(formState.feeType);
+  formState.activity = m.lastActivity || 'event';
+  setActivity(formState.activity);
+  formState.payment = m.lastPayment || 'cash';
+  setPayment(formState.payment);
   setType(formState.type);
 
-  document.getElementById('name-search').value =
-    m.firstName + ' ' + m.lastName;
+  // Show display name in search box — full name never shown in UI
+  const displayForInput = m.nickname
+    ? m.nickname + ' (' + (m.displayName || m.firstName) + ')'
+    : (m.displayName || m.firstName);
+  document.getElementById('name-search').value = displayForInput;
   document.getElementById('name-dropdown').classList.remove('open');
 
   // Show name preview
@@ -556,18 +515,14 @@ function selectMember(id) {
     document.querySelector('.name-preview-choose').style.display = 'none';
   }
 
-  // Check for pending (temp) record first, then PIN
+  // Check for pending (temp) record — show completion prompt
   if (!KIOSK) {
     db.ref('currentCheckins/' + id).once('value').then(function(snap) {
       var ciRecord = snap.val();
       if (ciRecord && ciRecord.pending) {
         showPendingCompletion(id, ciRecord);
-      } else if (m.checkinPin) {
-        showPinVerify(id);
       }
-    }).catch(function() {
-      if (m.checkinPin) showPinVerify(id);
-    });
+    }).catch(function() {});
   }
 }
 
@@ -708,240 +663,6 @@ function clearSig() {
 }
 
 // --- PIN VERIFY ---
-function showPinVerify(memberId) {
-  pinMode = 'verify';
-  pinEntry = '';
-  document.getElementById('view-form').style.display = 'none';
-  document.getElementById('view-pin').style.display = 'block';
-  document.getElementById('view-confirm').style.display = 'none';
-
-  const m = members[memberId];
-  document.getElementById('view-pin').innerHTML = `
-    <div class="card">
-      <div class="pin-screen">
-        <div class="pin-title">Welcome, ${m.firstName}!</div>
-        <div class="pin-subtitle">Enter your 4-digit PIN to check in</div>
-        <div class="pin-display">
-          <div class="pin-dot" id="pd0"></div>
-          <div class="pin-dot" id="pd1"></div>
-          <div class="pin-dot" id="pd2"></div>
-          <div class="pin-dot" id="pd3"></div>
-        </div>
-        <div class="pin-error" id="pin-error"></div>
-        <div class="pin-pad">
-          ${[1,2,3,4,5,6,7,8,9].map(n =>
-            `<div class="pin-key" onclick="pinPress('${n}')">${n}</div>`
-          ).join('')}
-          <div class="pin-key key-wide" onclick="pinPress('0')">0</div>
-          <div class="pin-key key-del" onclick="pinDel()">⌫</div>
-        </div>
-        <div><span class="pin-forgot" onclick="pinForgot()">Forgot PIN? Use full form</span></div>
-      </div>
-    </div>
-  `;
-}
-
-function pinPress(digit) {
-  if (pinEntry.length >= 4) return;
-  pinEntry += digit;
-  updatePinDots();
-  if (pinEntry.length === 4) {
-    setTimeout(() => checkPin(), 150);
-  }
-}
-function pinDel() {
-  pinEntry = pinEntry.slice(0, -1);
-  updatePinDots();
-  document.getElementById('pin-error').textContent = '';
-}
-function updatePinDots() {
-  for (let i = 0; i < 4; i++) {
-    const dot = document.getElementById('pd' + i);
-    if (dot) dot.className = 'pin-dot' + (i < pinEntry.length ? ' filled' : '');
-  }
-}
-function pinError() {
-  for (let i = 0; i < 4; i++) {
-    const dot = document.getElementById('pd' + i);
-    if (dot) dot.className = 'pin-dot error';
-  }
-  document.getElementById('pin-error').textContent = 'Incorrect PIN — try again';
-  setTimeout(() => {
-    pinEntry = '';
-    updatePinDots();
-  }, 800);
-}
-function checkPin() {
-  const m = members[formState.memberId];
-  if (!m) return;
-  if (pinEntry === String(m.checkinPin)) {
-    // PIN correct — auto submit with defaults
-    submitCheckinFast();
-  } else {
-    pinError();
-  }
-}
-function pinForgot() {
-  // Go back to full form with name pre-filled
-  formState.memberId = null;
-  renderForm();
-  setTimeout(() => {
-    const si = document.getElementById('name-search');
-    if (si) {
-      si.value = formState.firstName + ' ' + formState.lastName;
-      onNameSearch(si.value);
-    }
-  }, 50);
-}
-
-// Fast check-in after PIN verify — uses stored preferences
-async function submitCheckinFast() {
-  const m = members[formState.memberId];
-  // Check for duplicate check-in today
-  try {
-    const existing = await db.ref('currentCheckins/' + formState.memberId).once('value');
-    if (existing.val()) {
-      const d = new Date().toLocaleDateString('en-AU', {day:'numeric', month:'long', year:'numeric'});
-      showAlreadyCheckedIn(d);
-      pinEntry = '';
-      updatePinDots();
-      return;
-    }
-  } catch(e) {}
-  const feeAmt = formState.feeType === 'range' ? fees.range : fees.full;
-  const roName = getRoName();
-
-  const record = {
-    memberId: formState.memberId,
-    firstName: m.firstName,
-    lastName: m.lastName,
-    displayName: getPublicName(m),
-    type: m.isVisitor ? 'visitor' : 'member',
-    activity: m.lastActivity || 'event',
-    feeType: m.feePreference || 'full',
-    feeAmount: feeAmt,
-    payment: m.lastPayment || 'cash',
-    isRO: false,
-    roName: roName,
-    signed: true,
-    timestamp: Date.now()
-  };
-
-  try {
-    await db.ref('checkins/' + todayKey).push(record);
-    // Write to currentCheckins for index.html to watch
-    await db.ref('currentCheckins/' + formState.memberId).set(record);
-    showConfirm(record, false);
-  } catch(e) {
-    toast('Error saving — please try again', 'error');
-    pinEntry = '';
-    updatePinDots();
-  }
-}
-
-// --- PIN SETUP ---
-function showPinSetup(memberId) {
-  postCheckinMemberId = memberId;
-  pinMode = 'setup';
-  pinEntry = '';
-  pinFirst = '';
-  document.getElementById('view-confirm').innerHTML += `
-    <div class="setup-card" id="pin-setup-card">
-      <div class="setup-card-title">⚡ Enable Quick Check-In</div>
-      <p>Set a 4-digit PIN so next time you only need your first name and PIN — no form to fill in.</p>
-      <button class="btn-setup-pin" onclick="startPinSetup()">Set PIN</button>
-      <button class="btn-skip" onclick="document.getElementById('pin-setup-card').style.display='none'">Skip</button>
-    </div>
-  `;
-}
-
-function startPinSetup() {
-  pinMode = 'setup';
-  pinEntry = '';
-  document.getElementById('view-form').style.display = 'none';
-  document.getElementById('view-confirm').style.display = 'none';
-  document.getElementById('view-pin').style.display = 'block';
-  renderPinSetupScreen('Choose a 4-digit PIN');
-}
-
-function renderPinSetupScreen(title) {
-  document.getElementById('view-pin').innerHTML = `
-    <div class="card">
-      <div class="pin-screen">
-        <div class="pin-title">${title}</div>
-        <div class="pin-subtitle">${pinMode === 'setup2' ? 'Enter your PIN again to confirm' : 'This will be used for quick check-in'}</div>
-        <div class="pin-display">
-          <div class="pin-dot" id="pd0"></div>
-          <div class="pin-dot" id="pd1"></div>
-          <div class="pin-dot" id="pd2"></div>
-          <div class="pin-dot" id="pd3"></div>
-        </div>
-        <div class="pin-error" id="pin-error"></div>
-        <div class="pin-pad">
-          ${[1,2,3,4,5,6,7,8,9].map(n =>
-            `<div class="pin-key" onclick="pinPressSetup('${n}')">${n}</div>`
-          ).join('')}
-          <div class="pin-key key-wide" onclick="pinPressSetup('0')">0</div>
-          <div class="pin-key key-del" onclick="pinDelSetup()">⌫</div>
-        </div>
-        <div><span class="pin-forgot" onclick="skipPinSetup()">Skip for now</span></div>
-      </div>
-    </div>
-  `;
-}
-
-function pinPressSetup(digit) {
-  if (pinEntry.length >= 4) return;
-  pinEntry += digit;
-  updatePinDots();
-  if (pinEntry.length === 4) {
-    setTimeout(() => {
-      if (pinMode === 'setup') {
-        pinFirst = pinEntry;
-        pinEntry = '';
-        pinMode = 'setup2';
-        renderPinSetupScreen('Confirm your PIN');
-      } else if (pinMode === 'setup2') {
-        if (pinEntry === pinFirst) {
-          savePinToMember(postCheckinMemberId, pinEntry);
-        } else {
-          document.getElementById('pin-error').textContent = "PINs don't match — try again";
-          for (let i = 0; i < 4; i++) {
-            const dot = document.getElementById('pd' + i);
-            if (dot) dot.className = 'pin-dot error';
-          }
-          setTimeout(() => {
-            pinEntry = '';
-            pinFirst = '';
-            pinMode = 'setup';
-            renderPinSetupScreen('Choose a 4-digit PIN');
-          }, 900);
-        }
-      }
-    }, 150);
-  }
-}
-function pinDelSetup() {
-  pinEntry = pinEntry.slice(0, -1);
-  updatePinDots();
-}
-function skipPinSetup() {
-  document.getElementById('view-pin').style.display = 'none';
-  document.getElementById('view-confirm').style.display = 'block';
-}
-async function savePinToMember(memberId, pin) {
-  try {
-    await db.ref('members/' + memberId + '/checkinPin').set(pin);
-    members[memberId] = { ...members[memberId], checkinPin: pin };
-    document.getElementById('view-pin').style.display = 'none';
-    document.getElementById('view-confirm').style.display = 'block';
-    toast('PIN set! Quick check-in enabled ⚡', 'ok');
-  } catch(e) {
-    toast('Could not save PIN', 'error');
-    skipPinSetup();
-  }
-}
-
 // --- ALREADY CHECKED IN POPUP ---
 function showAlreadyCheckedIn(dateStr) {
   var el = document.getElementById('already-checkin-popup');
@@ -1097,12 +818,10 @@ async function submitCheckin() {
     // Write to currentCheckins for index.html Registration tab
     await db.ref('currentCheckins/' + memberId).set(record);
 
-    showConfirm(record, !formState.memberId || formState.isNew ? false : !members[memberId]?.checkinPin);
+    showConfirm(record);
 
     // Offer PIN setup to existing members who don't have one (personal QR mode only)
-    if (!KIOSK && memberId && !members[memberId]?.checkinPin) {
-      postCheckinMemberId = memberId;
-      setTimeout(() => showPinSetup(memberId), 300);
+    if (false) { // PIN removed
     }
 
   } catch(e) {
@@ -1126,9 +845,8 @@ function getRoName() {
 }
 
 // --- CONFIRMATION SCREEN ---
-function showConfirm(record, offerPin) {
+function showConfirm(record) {
   document.getElementById('view-form').style.display = 'none';
-  document.getElementById('view-pin').style.display = 'none';
   document.getElementById('view-confirm').style.display = 'block';
 
   const feeStr = '$' + record.feeAmount + ' · ' +
