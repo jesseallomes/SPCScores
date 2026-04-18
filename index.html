@@ -2370,6 +2370,12 @@ function shooterScoreCard(s) {
       </div>
     </div>
     <div id="scard-body-${s.id}" class="scard-body" style="display:${cardCollapsed ? 'none' : 'block'}">
+      ${(function() {
+        if (!s.memberId) return '';
+        var checkedIn = Object.values(_currentCheckins || {}).some(function(ci) { return ci.memberId === s.memberId; });
+        if (checkedIn) return '';
+        return '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:5px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#856404;display:flex;align-items:center;gap:6px">⚠ Not checked in yet</div>';
+      })()}
       <div id="pistol-entries-${s.id}">
         ${pistolEntries || '<div style="color:var(--muted);font-size:13px;padding:8px 0">No pistols added yet.</div>'}
       </div>
@@ -5598,8 +5604,43 @@ function startCheckinWatcher() {
   _checkinWatcherOn = true;
   db.ref('currentCheckins').on('value', function(snap) {
     _currentCheckins = snap.val() || {};
+    autoAddCheckedInShooters();
     updateCheckinBanner();
+    // Re-render score cards if on scores page to refresh warning badges
+    var activePage = document.querySelector('.page.active');
+    if (activePage && activePage.id === 'page-scores') {
+      renderScoreCards();
+    }
   });
+}
+
+function autoAddCheckedInShooters() {
+  var entries = Object.values(_currentCheckins);
+  if (!entries.length) return;
+  var existingIds = new Set(S.shooters.map(function(s) { return s.memberId; }).filter(Boolean));
+  var added = 0;
+  entries.forEach(function(ci) {
+    if (!ci.memberId || existingIds.has(ci.memberId)) return;
+    var m = allMembers[ci.memberId];
+    if (!m) return;
+    var shooter = {
+      id: newId(), memberId: m.id,
+      firstName: m.firstName, lastName: m.lastName,
+      displayName: m.displayName || m.firstName,
+      pistols: [], isRO: ci.isRO || m.isRO || false, isVisitor: m.isVisitor || false
+    };
+    S.shooters.push(shooter);
+    S.scores[shooter.id] = {};
+    S.attendance[shooter.id] = { c1: false, c2: false, c3: false, c4: false };
+    existingIds.add(m.id);
+    added++;
+  });
+  if (added) {
+    syncToFirebase();
+    renderSelectedChips();
+    if (added === 1) toast('1 shooter auto-added from check-in', 'success');
+    else toast(added + ' shooters auto-added from check-ins', 'success');
+  }
 }
 
 function updateCheckinBanner() {
@@ -5754,7 +5795,10 @@ function loadCIFeeData() {
     var all = snap.val() || {};
     _ciFeeData = [];
     Object.keys(all).filter(function(d) { return d.startsWith(String(year)); }).sort().forEach(function(dk) {
-      Object.values(all[dk]||{}).forEach(function(r) { _ciFeeData.push(Object.assign({}, r, {_dk: dk})); });
+      var dayObj = all[dk] || {};
+      Object.keys(dayObj).forEach(function(pushKey) {
+        _ciFeeData.push(Object.assign({}, dayObj[pushKey], {_dk: dk, _key: pushKey}));
+      });
     });
     renderCIFeeList();
   });
@@ -5785,17 +5829,35 @@ function renderCIFeeList() {
   }
   if (!data.length) { el.innerHTML = '<div class="empty-state">No records found</div>'; return; }
   var rows2 = data.map(function(r) {
-    var dk = r._dk||'';
+    var dk = r._dk||'', pk = r._key||'';
     var d = dk ? dk.slice(6,8)+'/'+dk.slice(4,6)+'/'+dk.slice(0,4) : '';
     var ps = r.payment==='bank' ? 'color:var(--accent2);font-weight:700' : 'color:var(--green);font-weight:700';
+    var q = String.fromCharCode(39);
+    var delBtn = pk ? '<button onclick="deleteCIFeeRecord(' + q+dk+q + ',' + q+pk+q + ')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:16px;font-weight:700;padding:0 4px;line-height:1" title="Delete record">&#x2715;</button>' : '';
     return '<tr>' +
       '<td style="font-family:\'Roboto Mono\',monospace;font-size:11px">' + d + '</td>' +
       '<td><strong>' + (r.displayName||r.firstName||'') + '</strong></td>' +
       '<td>$' + (r.feeAmount||0) + '</td>' +
       '<td style="' + ps + '">' + (r.payment==='bank'?'Bank':'Cash') + '</td>' +
+      '<td style="width:32px;text-align:center">' + delBtn + '</td>' +
     '</tr>';
   }).join('');
-  el.innerHTML = '<div class="card" style="padding:0;overflow:hidden"><table class="rtable"><thead><tr><th>Date</th><th>Name</th><th>Fee</th><th>Payment</th></tr></thead><tbody>' + rows2 + '</tbody></table></div>';
+  el.innerHTML = '<div class="card" style="padding:0;overflow:hidden"><table class="rtable"><thead><tr><th>Date</th><th>Name</th><th>Fee</th><th>Payment</th><th></th></tr></thead><tbody>' + rows2 + '</tbody></table></div>';
+}
+
+// ====================================================
+// DELETE CHECK-IN FEE RECORD
+// ====================================================
+function deleteCIFeeRecord(dk, pk) {
+  if (!confirm('Delete this check-in record permanently? This cannot be undone.')) return;
+  if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
+  db.ref('checkins/' + dk + '/' + pk).remove(function(err) {
+    if (err) { toast('Delete failed', 'error'); return; }
+    // Remove from local cache
+    _ciFeeData = _ciFeeData.filter(function(r) { return !(r._dk === dk && r._key === pk); });
+    renderCIFeeList();
+    toast('Record deleted', 'success');
+  });
 }
 
 // ====================================================
@@ -5829,27 +5891,46 @@ function exportCheckinExcel() {
     var memberMap = {};
     allRecs.forEach(function(r) {
       if (!r.memberId) return;
-      if (!memberMap[r.memberId]) memberMap[r.memberId]={fullName:(r.firstName||'')+' '+(r.lastName||''),displayName:r.displayName||r.firstName||'',days:new Set(),events:0,practice:0,cash:0,bank:0,total:0};
+      if (!memberMap[r.memberId]) memberMap[r.memberId]={fullName:(r.firstName||'')+' '+(r.lastName||''),displayName:r.displayName||r.firstName||'',days:new Set(),events:0,practice:0,cash:0,bank:0,total:0,c1:0,c2:0,c3:0,c4:0};
       var e=memberMap[r.memberId];
       e.days.add(r._dk);
       if(r.activity==='practice')e.practice++;else e.events++;
       if(r.payment==='bank')e.bank+=(r.feeAmount||0);else e.cash+=(r.feeAmount||0);
       e.total+=(r.feeAmount||0);
     });
-    var sumRows=[['Full Name','Display Name','Days','Events','Practice','Cash','Bank','Total']];
-    Object.values(memberMap).sort(function(a,b){return a.fullName.localeCompare(b.fullName);}).forEach(function(e){
-      sumRows.push([e.fullName,e.displayName,e.days.size,e.events,e.practice,e.cash,e.bank,e.total]);
-    });
-    var ws2=XLSX.utils.aoa_to_sheet(sumRows);
-    XLSX.utils.book_append_sheet(wb,ws2,'Member Summary');
-    var bytes=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
+    // Pull class counts from annual/{year} node
+    db.ref('annual/' + year).once('value', function(annualSnap) {
+      var annualData = annualSnap.val() || {};
+      // annual is keyed by safeKey, each has memberId or match by name
+      Object.values(annualData).forEach(function(a) {
+        // Find matching member in memberMap by name
+        var matched = Object.keys(memberMap).find(function(mid) {
+          var e = memberMap[mid];
+          return e.fullName.toLowerCase() === ((a.firstName||'')+' '+(a.lastName||'')).toLowerCase().trim();
+        });
+        if (matched) {
+          memberMap[matched].c1 = a.c1 || 0;
+          memberMap[matched].c2 = a.c2 || 0;
+          memberMap[matched].c3 = a.c3 || 0;
+          memberMap[matched].c4 = a.c4 || 0;
+        }
+      });
+      var sumRows=[['Full Name','Display Name','Days Attended','Events','Practice','Cash Paid','Bank Paid','Total Paid','Class 1','Class 2','Class 3','Class 4']];
+      Object.values(memberMap).sort(function(a,b){return a.fullName.localeCompare(b.fullName);}).forEach(function(e){
+        sumRows.push([e.fullName,e.displayName,e.days.size,e.events,e.practice,e.cash,e.bank,e.total,e.c1,e.c2,e.c3,e.c4]);
+      });
+      var ws2=XLSX.utils.aoa_to_sheet(sumRows);
+      ws2['!cols']=[{wch:22},{wch:16},{wch:14},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10},{wch:8},{wch:8},{wch:8},{wch:8}];
+      XLSX.utils.book_append_sheet(wb,ws2,'Member Summary');
+      var bytes=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
     var blob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     var url=URL.createObjectURL(blob);
     var a=document.createElement('a');
     a.href=url;a.download='SPC-Checkins-'+year+'.xlsx';
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast('Check-in export downloaded!','success');
+      toast('Check-in export downloaded!','success');
+    });
   });
 }
 
