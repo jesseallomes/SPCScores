@@ -2020,6 +2020,31 @@ function confirmShooters() {
     }
   }
 
+  // Create temp currentCheckins records for shooters not yet checked in
+  if (db && isFirebaseReady) {
+    S.shooters.forEach(function(shooter) {
+      if (!shooter.memberId) return;
+      db.ref('currentCheckins/' + shooter.memberId).once('value', function(snap) {
+        if (!snap.val()) {
+          var m = allMembers[shooter.memberId] || shooter;
+          db.ref('currentCheckins/' + shooter.memberId).set({
+            memberId: shooter.memberId,
+            firstName: shooter.firstName,
+            lastName: shooter.lastName,
+            displayName: m.displayName || shooter.firstName,
+            type: shooter.isVisitor ? 'visitor' : 'member',
+            pending: true,
+            signed: false,
+            feeAmount: 0,
+            feeType: '',
+            payment: '',
+            timestamp: Date.now()
+          });
+        }
+      });
+    });
+  }
+
   // Clear manual rows, chips, reset ticklist
   document.getElementById('name-entry-list').innerHTML = '';
   nameRows = [];
@@ -2374,7 +2399,7 @@ function shooterScoreCard(s) {
         if (!s.memberId) return '';
         var checkedIn = Object.values(_currentCheckins || {}).some(function(ci) { return ci.memberId === s.memberId; });
         if (checkedIn) return '';
-        return '<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:5px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#856404;display:flex;align-items:center;gap:6px">⚠ Not checked in yet</div>';
+        return '<div class="checkin-warning" style="background:#fff3cd;border:1px solid #ffc107;border-radius:5px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#856404;display:flex;align-items:center;gap:6px">&#x26A0; Not checked in yet</div>';
       })()}
       <div id="pistol-entries-${s.id}">
         ${pistolEntries || '<div style="color:var(--muted);font-size:13px;padding:8px 0">No pistols added yet.</div>'}
@@ -3392,6 +3417,26 @@ function addLateNewShooter() {
   S.shooters.push(shooter);
   S.scores[shooter.id] = {};
   S.attendance[shooter.id] = { c1:false, c2:false, c3:false, c4:false };
+  // Create temp currentCheckins record if not already checked in
+  if (memberId && db && isFirebaseReady) {
+    db.ref('currentCheckins/' + memberId).once('value', function(snap) {
+      if (!snap.val()) {
+        db.ref('currentCheckins/' + memberId).set({
+          memberId: memberId,
+          firstName: first,
+          lastName: last,
+          displayName: allMembers[memberId] ? (allMembers[memberId].displayName || first) : first,
+          type: isVisitor ? 'visitor' : 'member',
+          pending: true,
+          signed: false,
+          feeAmount: 0,
+          feeType: '',
+          payment: '',
+          timestamp: Date.now()
+        });
+      }
+    });
+  }
   closeLateModal();
   syncToFirebase();
   renderScoreCards();
@@ -5604,23 +5649,28 @@ function startCheckinWatcher() {
   _checkinWatcherOn = true;
   db.ref('currentCheckins').on('value', function(snap) {
     _currentCheckins = snap.val() || {};
-    autoAddCheckedInShooters();
+    var added = autoAddCheckedInShooters();
+    var removed = syncCheckinRemovals();
     updateCheckinBanner();
-    // Re-render score cards if on scores page to refresh warning badges
     var activePage = document.querySelector('.page.active');
     if (activePage && activePage.id === 'page-scores') {
-      renderScoreCards();
+      if (added || removed) {
+        renderScoreCards();
+      } else {
+        updateCheckinWarnings();
+      }
     }
   });
 }
 
 function autoAddCheckedInShooters() {
   var entries = Object.values(_currentCheckins);
-  if (!entries.length) return;
+  if (!entries.length) return 0;
   var existingIds = new Set(S.shooters.map(function(s) { return s.memberId; }).filter(Boolean));
   var added = 0;
   entries.forEach(function(ci) {
-    if (!ci.memberId || existingIds.has(ci.memberId)) return;
+    // Only auto-add fully checked-in shooters (not pending/temp records)
+    if (!ci.memberId || ci.pending || existingIds.has(ci.memberId)) return;
     var m = allMembers[ci.memberId];
     if (!m) return;
     var shooter = {
@@ -5641,6 +5691,52 @@ function autoAddCheckedInShooters() {
     if (added === 1) toast('1 shooter auto-added from check-in', 'success');
     else toast(added + ' shooters auto-added from check-ins', 'success');
   }
+  return added;
+}
+
+function syncCheckinRemovals() {
+  // Remove shooters from session whose currentCheckins entry was hard-deleted
+  // (not just pending — pending means manually added, keep them)
+  if (!Object.keys(_currentCheckins).length) return 0;
+  var checkedInIds = new Set(Object.keys(_currentCheckins));
+  var before = S.shooters.length;
+  S.shooters = S.shooters.filter(function(s) {
+    if (!s.memberId) return true; // no memberId = keep
+    // Keep if they have a currentCheckins record (pending or full)
+    return checkedInIds.has(s.memberId);
+  });
+  var removed = before - S.shooters.length;
+  if (removed) {
+    // Clean up scores/attendance for removed shooters
+    var keepIds = new Set(S.shooters.map(function(s) { return s.id; }));
+    Object.keys(S.scores).forEach(function(sid) { if (!keepIds.has(sid)) delete S.scores[sid]; });
+    Object.keys(S.attendance).forEach(function(sid) { if (!keepIds.has(sid)) delete S.attendance[sid]; });
+    syncToFirebase();
+  }
+  return removed;
+}
+
+function updateCheckinWarnings() {
+  // Lightweight: just update warning badges on existing cards without full re-render
+  S.shooters.forEach(function(s) {
+    if (!s.memberId) return;
+    var body = document.getElementById('scard-body-' + s.id);
+    if (!body) return;
+    var existing = body.querySelector('.checkin-warning');
+    var ci = _currentCheckins[s.memberId];
+    var isPending = ci && ci.pending;
+    if (isPending) {
+      if (!existing) {
+        var warn = document.createElement('div');
+        warn.className = 'checkin-warning';
+        warn.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:5px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:600;color:#856404;display:flex;align-items:center;gap:6px';
+        warn.textContent = '⚠ Not checked in yet';
+        body.insertBefore(warn, body.firstChild);
+      }
+    } else {
+      if (existing) existing.remove();
+    }
+  });
 }
 
 function updateCheckinBanner() {

@@ -206,7 +206,7 @@ input[type=text]::placeholder { color: #bbb; }
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script>
-// ─── FIREBASE ────────────────────────────────────────────────────────────────
+// --- FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyANlUmGg_IkBRTfzYXdOA7UjdBbED56tm8",
   authDomain: "pistol-club-scores.firebaseapp.com",
@@ -216,7 +216,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ─── STATE ───────────────────────────────────────────────────────────────────
+// --- STATE ---
 const KIOSK = new URLSearchParams(location.search).has('kiosk');
 let members = {};        // id → member object
 let roMembers = [];      // members with isRO true
@@ -244,7 +244,7 @@ let pinMode = '';        // 'verify' | 'setup' | 'setup2'
 let pinFirst = '';       // first entry when setting up PIN
 let postCheckinMemberId = null;
 
-// ─── INIT ────────────────────────────────────────────────────────────────────
+// --- INIT ---
 window.addEventListener('DOMContentLoaded', async () => {
   todayKey = formatDateKey(new Date());
   document.getElementById('header-date').textContent =
@@ -291,7 +291,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   renderForm();
 });
 
-// ─── DATE HELPERS ────────────────────────────────────────────────────────────
+// --- DATE HELPERS ---
 function formatDateKey(d) {
   return d.getFullYear().toString() +
     String(d.getMonth()+1).padStart(2,'0') +
@@ -305,7 +305,7 @@ function formatTime(ts) {
   return d.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit', hour12:true });
 }
 
-// ─── DISPLAY NAME COMPUTATION ─────────────────────────────────────────────────
+// --- DISPLAY NAME COMPUTATION ---
 function computeDisplayNames() {
   const all = Object.values(members);
   // Group by first name
@@ -346,7 +346,7 @@ function getPublicName(m) {
   return m.displayName || m.firstName;
 }
 
-// ─── TABS ────────────────────────────────────────────────────────────────────
+// --- TABS ---
 function showTab(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -354,7 +354,7 @@ function showTab(name) {
   document.getElementById('tab-btn-' + name).classList.add('active');
 }
 
-// ─── TOAST ───────────────────────────────────────────────────────────────────
+// --- TOAST ---
 function toast(msg, type = '') {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -363,7 +363,7 @@ function toast(msg, type = '') {
   el._t = setTimeout(() => el.className = '', 2800);
 }
 
-// ─── FORM RENDER ─────────────────────────────────────────────────────────────
+// --- FORM RENDER ---
 function resetFormState() {
   formState = {
     memberId: null, isNew: false,
@@ -478,7 +478,7 @@ function renderForm() {
   }
 }
 
-// ─── NAME SEARCH ─────────────────────────────────────────────────────────────
+// --- NAME SEARCH ---
 function onNameSearch(val) {
   const dd = document.getElementById('name-dropdown');
   const preview = document.getElementById('name-preview');
@@ -552,9 +552,18 @@ function selectMember(id) {
     document.querySelector('.name-preview-choose').style.display = 'none';
   }
 
-  // Check if they have a PIN — if so, show PIN screen instead of form completion
-  if (m.checkinPin && !KIOSK) {
-    showPinVerify(id);
+  // Check for pending (temp) record first, then PIN
+  if (!KIOSK) {
+    db.ref('currentCheckins/' + id).once('value').then(function(snap) {
+      var ciRecord = snap.val();
+      if (ciRecord && ciRecord.pending) {
+        showPendingCompletion(id, ciRecord);
+      } else if (m.checkinPin) {
+        showPinVerify(id);
+      }
+    }).catch(function() {
+      if (m.checkinPin) showPinVerify(id);
+    });
   }
 }
 
@@ -589,7 +598,7 @@ function computeNewDisplayName(first, last) {
   return first + ' ' + last.substring(0, len);
 }
 
-// ─── NICKNAME ────────────────────────────────────────────────────────────────
+// --- NICKNAME ---
 function toggleNicknameInput() {
   const wrap = document.getElementById('nickname-wrap');
   const showing = wrap.style.display === 'block';
@@ -605,7 +614,7 @@ function onNicknameInput(val) {
   document.getElementById('preview-display-name').textContent = shown;
 }
 
-// ─── OPTION BUTTONS ──────────────────────────────────────────────────────────
+// --- OPTION BUTTONS ---
 function setType(t) {
   formState.type = t;
   document.getElementById('btn-member').className = 'opt-btn' + (t==='member' ? ' sel-blue' : '');
@@ -632,7 +641,7 @@ function onROSelfChange(checked) {
   if (checked) formState.roId = formState.memberId;
 }
 
-// ─── SIGNATURE ───────────────────────────────────────────────────────────────
+// --- SIGNATURE ---
 function initSigCanvas() {
   const canvas = document.getElementById('sig-canvas');
   if (!canvas) return;
@@ -694,7 +703,7 @@ function clearSig() {
   document.getElementById('sig-status').className = 'sig-status';
 }
 
-// ─── PIN VERIFY ──────────────────────────────────────────────────────────────
+// --- PIN VERIFY ---
 function showPinVerify(memberId) {
   pinMode = 'verify';
   pinEntry = '';
@@ -784,6 +793,17 @@ function pinForgot() {
 // Fast check-in after PIN verify — uses stored preferences
 async function submitCheckinFast() {
   const m = members[formState.memberId];
+  // Check for duplicate check-in today
+  try {
+    const existing = await db.ref('currentCheckins/' + formState.memberId).once('value');
+    if (existing.val()) {
+      const d = new Date().toLocaleDateString('en-AU', {day:'numeric', month:'long', year:'numeric'});
+      toast('Already checked in for ' + d, 'error');
+      pinEntry = '';
+      updatePinDots();
+      return;
+    }
+  } catch(e) {}
   const feeAmt = formState.feeType === 'range' ? fees.range : fees.full;
   const roName = getRoName();
 
@@ -815,7 +835,7 @@ async function submitCheckinFast() {
   }
 }
 
-// ─── PIN SETUP ───────────────────────────────────────────────────────────────
+// --- PIN SETUP ---
 function showPinSetup(memberId) {
   postCheckinMemberId = memberId;
   pinMode = 'setup';
@@ -881,7 +901,7 @@ function pinPressSetup(digit) {
         if (pinEntry === pinFirst) {
           savePinToMember(postCheckinMemberId, pinEntry);
         } else {
-          document.getElementById('pin-error').textContent = 'PINs don\'t match — try again';
+          document.getElementById('pin-error').textContent = "PINs don't match — try again";
           for (let i = 0; i < 4; i++) {
             const dot = document.getElementById('pd' + i);
             if (dot) dot.className = 'pin-dot error';
@@ -918,7 +938,41 @@ async function savePinToMember(memberId, pin) {
   }
 }
 
-// ─── SUBMIT CHECK-IN ─────────────────────────────────────────────────────────
+// --- PENDING COMPLETION ---
+function showPendingCompletion(memberId, pendingRecord) {
+  const m = members[memberId];
+  if (!m) return;
+  // Pre-fill form state from member profile
+  formState.memberId = memberId;
+  formState.firstName = m.firstName;
+  formState.lastName = m.lastName;
+  formState.type = m.isVisitor ? 'visitor' : 'member';
+  formState.feeType = m.feePreference || 'full';
+  formState.activity = m.lastActivity || 'event';
+  formState.payment = m.lastPayment || 'cash';
+
+  // Show pending banner above the form
+  const banner = document.createElement('div');
+  banner.id = 'pending-banner';
+  banner.style.cssText = 'background:#fff3cd;border:1.5px solid #ffc107;border-radius:8px;padding:12px 14px;margin-bottom:12px';
+  banner.innerHTML = '<div style="font-weight:700;font-size:14px;color:#856404">&#x26A0; Complete Your Check-In</div>' +
+    '<div style="font-size:12px;color:#856404;margin-top:2px">You have been added to tonight's session. Please complete your check-in details and make payment.</div>';
+
+  const formView = document.getElementById('view-form');
+  if (formView && !document.getElementById('pending-banner')) {
+    formView.insertBefore(banner, formView.firstChild);
+  }
+
+  // Set fee buttons
+  setFee(formState.feeType);
+  setActivity(formState.activity);
+  setPayment(formState.payment);
+  setType(formState.type);
+  const nameInput = document.getElementById('name-search');
+  if (nameInput) nameInput.value = m.firstName + ' ' + m.lastName;
+}
+
+// --- SUBMIT CHECK-IN ---
 async function submitCheckin() {
   if (!formState.signed) { toast('Please sign above', 'error'); return; }
 
@@ -931,6 +985,18 @@ async function submitCheckin() {
 
   try {
     let memberId = formState.memberId;
+
+    // Check for duplicate check-in (existing members only)
+    if (memberId && !formState.isNew) {
+      const existing = await db.ref('currentCheckins/' + memberId).once('value');
+      if (existing.val()) {
+        const d = new Date().toLocaleDateString('en-AU', {day:'numeric', month:'long', year:'numeric'});
+        toast('Already checked in for ' + d, 'error');
+        btn.disabled = false;
+        btn.textContent = '✓ CHECK IN';
+        return;
+      }
+    }
 
     // New member — create record
     if (formState.isNew || !memberId) {
@@ -1020,7 +1086,7 @@ function getRoName() {
   return '';
 }
 
-// ─── CONFIRMATION SCREEN ─────────────────────────────────────────────────────
+// --- CONFIRMATION SCREEN ---
 function showConfirm(record, offerPin) {
   document.getElementById('view-form').style.display = 'none';
   document.getElementById('view-pin').style.display = 'none';
@@ -1065,7 +1131,7 @@ function goLive() {
   window.location.href = 'live.html';
 }
 
-// ─── TONIGHT TAB ─────────────────────────────────────────────────────────────
+// --- TONIGHT TAB ---
 function renderTonightTab() {
   const list = Object.values(todayCheckins);
   document.getElementById('tonight-count').textContent = list.length;
@@ -1085,7 +1151,7 @@ function renderTonightTab() {
       ? '<span class="badge badge-visitor">Visitor</span>'
       : '<span class="badge badge-member">Member</span>';
     const badgeRO = ci.isRO ? '<span class="badge badge-ro">RO</span>' : '';
-    const badgeSigned = ci.signed ? '<span class="badge badge-signed">✓ Signed</span>' : '';
+    const badgeSigned = ci.signed ? '<span class="badge badge-signed">✓ Signed</span>' : (ci.pending ? '<span class="badge" style="background:#fff3cd;color:#856404">⚠ Pending</span>' : '');
     const badgePractice = ci.activity === 'practice' ? '<span class="badge badge-practice">Practice</span>' : '';
     const feeLabel = ci.feeType === 'range' ? 'Range Pass' : 'Full Fee';
     const payLabel = ci.payment === 'bank' ? 'Bank' : 'Cash';
@@ -1098,7 +1164,7 @@ function renderTonightTab() {
           <div class="badges">${badgeMember}${badgeRO}${badgeSigned}${badgePractice}</div>
           <div class="ci-detail">${feeLabel} $${ci.feeAmount} · ${payLabel} · ${timeStr}${roStr}</div>
         </div>
-        <div class="ci-fee">$${ci.feeAmount}</div>
+        <div class="ci-fee">${ci.pending ? '&mdash;' : '$' + ci.feeAmount}</div>
       </div>`;
   }).join('');
 
