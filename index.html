@@ -3911,20 +3911,29 @@ let CFG = {
   theme: 'auto',
   clubGuns: []
 };
+// Apply theme immediately from phone preference before Firebase loads
+(function() {
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (prefersDark) document.documentElement.setAttribute('data-theme', 'dark');
+})();
 
 async function loadSettings() {
   if (!db || !isFirebaseReady) return;
   const snap = await db.ref('config').once('value');
   const data = snap.val();
   if (data) {
+    // Preserve clubGuns if not in Firebase data
+    const savedGuns = data.clubGuns || CFG.clubGuns || [];
     CFG = { ...CFG, ...data };
-    if (!CFG.clubGuns) CFG.clubGuns = [];
+    CFG.clubGuns = savedGuns;
   }
   applyTheme(CFG.theme);
-  // Listen for config changes (theme sync between ROs)
+  // Listen for config changes (theme + clubGuns sync)
   db.ref('config').on('value', snap => {
     const d = snap.val();
-    if (d && d.theme) applyTheme(d.theme);
+    if (!d) return;
+    if (d.theme) applyTheme(d.theme);
+    if (d.clubGuns) CFG.clubGuns = d.clubGuns;
   });
 }
 
@@ -5149,6 +5158,16 @@ function buildEmailBody() {
 // ====================================================
 // FIREBASE SYNC
 // ====================================================
+// Debounced renderScoreCards — prevents cascade re-renders from watcher + listenSession
+var _renderScoreCardsTimer = null;
+function debouncedRenderScoreCards() {
+  if (_renderScoreCardsTimer) clearTimeout(_renderScoreCardsTimer);
+  _renderScoreCardsTimer = setTimeout(function() {
+    _renderScoreCardsTimer = null;
+    renderScoreCards();
+  }, 120);
+}
+
 function syncToFirebase() {
   if (!db || !isFirebaseReady || !sessionKey) return Promise.resolve();
   return db.ref(`sessions/${sessionKey}`).set({
@@ -5178,7 +5197,7 @@ function listenSession() {
       // Don't re-render if user is actively typing in an input
       const focused = document.activeElement;
       const isTyping = focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA');
-      if (!isTyping) renderScoreCards();
+      if (!isTyping) debouncedRenderScoreCards();
     }
     if (activePage === 'results') renderResults();
     if (activePage === 'attend') renderAttendance();
@@ -5772,7 +5791,7 @@ function startCheckinWatcher() {
     var activePage = document.querySelector('.page.active');
     if (activePage && activePage.id === 'page-scores') {
       if (added || removed) {
-        renderScoreCards();
+        debouncedRenderScoreCards();
       } else {
         updateCheckinWarnings();
       }
