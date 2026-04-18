@@ -1168,7 +1168,7 @@ table.rtable tr:hover td { background: #fafaf8; }
           </div>
           <input type="text" id="ci-fee-search" placeholder="Search by name..." style="margin-top:10px;margin-bottom:0" oninput="renderCIFeeList()">
         </div>
-        <div id="ci-fee-totals" style="display:none" class="card" style="padding:12px 16px;margin-bottom:12px"></div>
+        <div id="ci-fee-totals" class="card" style="display:none;padding:12px 16px;margin-bottom:12px"></div>
         <div id="ci-fee-list"><div class="empty-state">Select a year above.</div></div>
       </div>
     </div>
@@ -5479,12 +5479,9 @@ window.addEventListener('appinstalled', () => {
 // ====================================================
 function renderNicknameBadge(m) {
   if (!m || !m.nickname) return '';
-  var span = '<span style="margin-left:6px;background:#e8f4ff;color:var(--accent2);' +
-    'padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">' +
-    m.nickname + '</span>';
-  var btn = ' <button class="btn btn-xs" style="color:var(--muted);border:1px solid ' +
-    'var(--muted);background:white;margin-left:4px" ' +
-    'onclick="clearMemberNickname(\'' + m.id + '\')">Clear nickname</button>';
+  var q = String.fromCharCode(39);
+  var span = '<span style="margin-left:6px;background:#e8f4ff;color:var(--accent2);padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">' + m.nickname + '</span>';
+  var btn = ' <button class="btn btn-xs" style="color:var(--muted);border:1px solid var(--muted);background:white;margin-left:4px" onclick="clearMemberNickname(' + q + m.id + q + ')">Clear nickname</button>';
   return span + btn;
 }
 
