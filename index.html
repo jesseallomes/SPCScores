@@ -5475,39 +5475,43 @@ window.addEventListener('appinstalled', () => {
 });
 
 // ====================================================
-// NICKNAME BADGE helper (avoids quote-escaping in template literals)
+
+// ====================================================
+// NICKNAME BADGE — renders nickname span + clear button
 // ====================================================
 function renderNicknameBadge(m) {
   if (!m || !m.nickname) return '';
   var q = String.fromCharCode(39);
-  var span = '<span style="margin-left:6px;background:#e8f4ff;color:var(--accent2);padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700">' + m.nickname + '</span>';
-  var btn = ' <button class="btn btn-xs" style="color:var(--muted);border:1px solid var(--muted);background:white;margin-left:4px" onclick="clearMemberNickname(' + q + m.id + q + ')">Clear nickname</button>';
-  return span + btn;
+  var s = '<span style="background:#e8f4ff;color:var(--accent2);padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700;margin-left:6px">' + m.nickname + '</span>';
+  var b = '<button class="btn btn-xs" style="color:var(--muted);border:1px solid var(--muted);background:white;margin-left:4px" onclick="clearMemberNickname(' + q + m.id + q + ')">Clear</button>';
+  return s + b;
 }
 
 // ====================================================
-// DISPLAY NAMES — minimum unique prefix
+// DISPLAY NAMES — minimum unique last-name prefix
 // ====================================================
 function computeDisplayNames() {
-  const all = Object.values(allMembers);
-  const byFirst = {};
-  all.forEach(m => {
-    const fn = (m.firstName || '').toLowerCase();
+  var all = Object.values(allMembers);
+  var byFirst = {};
+  all.forEach(function(m) {
+    var fn = (m.firstName || '').toLowerCase();
     if (!byFirst[fn]) byFirst[fn] = [];
     byFirst[fn].push(m);
   });
-  all.forEach(m => {
-    const fn = (m.firstName || '').toLowerCase();
-    const group = byFirst[fn];
+  all.forEach(function(m) {
+    var fn = (m.firstName || '').toLowerCase();
+    var group = byFirst[fn];
     if (group.length === 1) {
       allMembers[m.id].displayName = m.firstName;
     } else {
-      const ln = m.lastName || '';
-      const others = group.filter(o => o.id !== m.id);
-      let len = 1;
+      var ln = m.lastName || '';
+      var others = group.filter(function(o) { return o.id !== m.id; });
+      var len = 1;
       while (len <= ln.length) {
-        const prefix = ln.substring(0, len).toLowerCase();
-        const clash = others.some(o => (o.lastName || '').toLowerCase().substring(0, len) === prefix);
+        var prefix = ln.substring(0, len).toLowerCase();
+        var clash = others.some(function(o) {
+          return (o.lastName || '').toLowerCase().substring(0, len) === prefix;
+        });
         if (!clash) break;
         len++;
       }
@@ -5516,21 +5520,18 @@ function computeDisplayNames() {
   });
 }
 
-async function persistDisplayNames() {
+function persistDisplayNames() {
   if (!db || !isFirebaseReady) return;
-  const writes = Object.values(allMembers).map(m =>
-    db.ref('members/' + m.id + '/displayName').set(m.displayName || m.firstName)
-  );
-  await Promise.all(writes);
+  Object.values(allMembers).forEach(function(m) {
+    db.ref('members/' + m.id + '/displayName').set(m.displayName || m.firstName);
+  });
 }
 
-// Returns the public-facing name for a shooter object (has firstName/lastName/displayName/nickname)
 function getDisplayName(s) {
-  // s can be a session shooter or a member object
-  const memberId = s.memberId || s.id;
-  const m = memberId ? allMembers[memberId] : null;
-  const nickname = m ? m.nickname : (s.nickname || '');
-  const displayName = (m && m.displayName) ? m.displayName
+  var memberId = s.memberId || s.id;
+  var m = memberId ? allMembers[memberId] : null;
+  var nickname = m ? (m.nickname || '') : (s.nickname || '');
+  var displayName = (m && m.displayName) ? m.displayName
     : (s.displayName || (s.firstName + (s.lastName ? ' ' + s.lastName.charAt(0) : '')));
   if (nickname) return nickname + ' (' + displayName + ')';
   return displayName;
@@ -5540,38 +5541,36 @@ function getDisplayName(s) {
 // RO SEARCH DROPDOWN (Comp Setup)
 // ====================================================
 function searchRODropdown(val) {
-  const dd = document.getElementById('ro-dropdown');
+  var dd = document.getElementById('ro-dropdown');
   if (!dd) return;
-  const q = (val || '').toLowerCase().trim();
-  const roList = Object.values(allMembers).filter(m => m.isRO);
-  if (!q && !document.getElementById('ro-name').matches(':focus')) { dd.style.display = 'none'; return; }
-  const matches = roList.filter(m =>
-    (m.firstName + ' ' + m.lastName).toLowerCase().includes(q) ||
-    (m.displayName || '').toLowerCase().includes(q)
-  );
+  var q = (val || '').toLowerCase().trim();
+  var roList = Object.values(allMembers).filter(function(m) { return m.isRO; });
+  if (!q) { dd.style.display = 'none'; return; }
+  var matches = roList.filter(function(m) {
+    return ((m.firstName || '') + ' ' + (m.lastName || '')).toLowerCase().includes(q)
+      || (m.displayName || '').toLowerCase().includes(q);
+  });
   if (!matches.length) { dd.style.display = 'none'; return; }
-  dd.innerHTML = matches.map(m => {
-    const dn = getDisplayName(m);
-    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:15px;font-weight:600" ' +
-      'onclick="selectROFromDropdown(\'' + m.id + '\')"> ' + dn + '</div>';
+  dd.innerHTML = matches.map(function(m) {
+    var dn = getDisplayName(m);
+    var q2 = String.fromCharCode(39);
+    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:15px;font-weight:600" onclick="selectROFromDropdown(' + q2 + m.id + q2 + ')">' + dn + '</div>';
   }).join('');
   dd.style.display = 'block';
 }
 
 function selectROFromDropdown(mid) {
-  const m = allMembers[mid];
+  var m = allMembers[mid];
   if (!m) return;
-  const input = document.getElementById('ro-name');
+  var input = document.getElementById('ro-name');
   if (input) input.value = m.firstName + ' ' + m.lastName;
-  const dd = document.getElementById('ro-dropdown');
+  var dd = document.getElementById('ro-dropdown');
   if (dd) dd.style.display = 'none';
-  S.ro = m.firstName + ' ' + m.lastName;
 }
 
-// Close RO dropdown when clicking outside
 document.addEventListener('click', function(e) {
-  const inp = document.getElementById('ro-name');
-  const dd = document.getElementById('ro-dropdown');
+  var inp = document.getElementById('ro-name');
+  var dd = document.getElementById('ro-dropdown');
   if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) {
     dd.style.display = 'none';
   }
@@ -5580,58 +5579,51 @@ document.addEventListener('click', function(e) {
 // ====================================================
 // FEE SETTINGS
 // ====================================================
-async function saveFeeSettings() {
-  const full = parseFloat(document.getElementById('fee-full').value) || 5;
-  const range = parseFloat(document.getElementById('fee-range').value) || 3;
-  CFG.fees = { full, range };
-  await saveSettings();
+function saveFeeSettings() {
+  var full = parseFloat(document.getElementById('fee-full').value) || 5;
+  var range = parseFloat(document.getElementById('fee-range').value) || 3;
+  CFG.fees = { full: full, range: range };
+  saveSettings();
   toast('Fee settings saved!', 'success');
 }
 
 // ====================================================
 // CURRENT CHECK-INS WATCHER (Registration tab)
 // ====================================================
-let _checkinWatcherOn = false;
-let _currentCheckins = {};
+var _checkinWatcherOn = false;
+var _currentCheckins = {};
 
 function startCheckinWatcher() {
   if (_checkinWatcherOn || !db || !isFirebaseReady) return;
   _checkinWatcherOn = true;
-  db.ref('currentCheckins').on('value', snap => {
+  db.ref('currentCheckins').on('value', function(snap) {
     _currentCheckins = snap.val() || {};
     updateCheckinBanner();
   });
 }
 
 function updateCheckinBanner() {
-  const banner = document.getElementById('checkin-banner');
-  const detail = document.getElementById('checkin-banner-detail');
+  var banner = document.getElementById('checkin-banner');
+  var detail = document.getElementById('checkin-banner-detail');
   if (!banner) return;
-  const entries = Object.values(_currentCheckins);
+  var entries = Object.values(_currentCheckins);
   if (!entries.length) { banner.style.display = 'none'; return; }
-  // Filter out shooters already in session
-  const existingMemberIds = new Set(S.shooters.map(s => s.memberId).filter(Boolean));
-  const pending = entries.filter(ci => !existingMemberIds.has(ci.memberId));
+  var existingIds = new Set(S.shooters.map(function(s) { return s.memberId; }).filter(Boolean));
+  var pending = entries.filter(function(ci) { return !existingIds.has(ci.memberId); });
   if (!pending.length) { banner.style.display = 'none'; return; }
   banner.style.display = 'block';
-  detail.textContent = pending.length + ' shooter' + (pending.length !== 1 ? 's' : '') + ' checked in and not yet added';
+  if (detail) detail.textContent = pending.length + ' shooter' + (pending.length !== 1 ? 's' : '') + ' checked in and not yet added';
 }
 
-async function addAllCheckedInShooters() {
-  const entries = Object.values(_currentCheckins);
-  const existingMemberIds = new Set(S.shooters.map(s => s.memberId).filter(Boolean));
-  let added = 0;
-  for (const ci of entries) {
-    if (!ci.memberId || existingMemberIds.has(ci.memberId)) continue;
-    // Load member from allMembers or fetch
-    let m = allMembers[ci.memberId];
-    if (!m) {
-      const snap = await db.ref('members/' + ci.memberId).once('value');
-      m = snap.val();
-      if (m) allMembers[m.id] = m;
-    }
-    if (!m) continue;
-    const shooter = {
+function addAllCheckedInShooters() {
+  var entries = Object.values(_currentCheckins);
+  var existingIds = new Set(S.shooters.map(function(s) { return s.memberId; }).filter(Boolean));
+  var added = 0;
+  entries.forEach(function(ci) {
+    if (!ci.memberId || existingIds.has(ci.memberId)) return;
+    var m = allMembers[ci.memberId];
+    if (!m) return;
+    var shooter = {
       id: newId(), memberId: m.id,
       firstName: m.firstName, lastName: m.lastName,
       displayName: m.displayName || m.firstName,
@@ -5640,9 +5632,9 @@ async function addAllCheckedInShooters() {
     S.shooters.push(shooter);
     S.scores[shooter.id] = {};
     S.attendance[shooter.id] = { c1: false, c2: false, c3: false, c4: false };
-    existingMemberIds.add(m.id);
+    existingIds.add(m.id);
     added++;
-  }
+  });
   if (added) {
     syncToFirebase();
     renderSelectedChips();
@@ -5653,16 +5645,14 @@ async function addAllCheckedInShooters() {
   }
 }
 
-// checkin watcher started from nav() — patched below via navCheckinHook
-
 // ====================================================
-// NICKNAME MANAGEMENT (Admin → Shooters)
+// NICKNAME — Admin clear
 // ====================================================
-async function clearMemberNickname(mid) {
+function clearMemberNickname(mid) {
   if (!confirm('Clear this member\'s nickname? They will revert to their auto-generated display name.')) return;
   if (allMembers[mid]) {
     delete allMembers[mid].nickname;
-    if (db && isFirebaseReady) await db.ref('members/' + mid + '/nickname').remove();
+    if (db && isFirebaseReady) db.ref('members/' + mid + '/nickname').remove();
   }
   loadMembersList();
   toast('Nickname cleared', 'success');
@@ -5671,292 +5661,225 @@ async function clearMemberNickname(mid) {
 // ====================================================
 // CHECK-IN HISTORY TAB
 // ====================================================
-let _ciAllData = {};   // date -> { pushKey: record }
-let _ciFeeData = [];   // flat list for fee reconciliation
+var _ciAllData = {};
+var _ciFeeData = [];
 
 function showCISubTab(tab) {
   document.getElementById('ci-subtab-sessions').style.display = tab === 'sessions' ? 'block' : 'none';
   document.getElementById('ci-subtab-fees').style.display = tab === 'fees' ? 'block' : 'none';
   document.getElementById('ci-subtab-btn-sessions').className = tab === 'sessions' ? 'btn btn-red btn-sm' : 'btn btn-outline btn-sm';
   document.getElementById('ci-subtab-btn-fees').className = tab === 'fees' ? 'btn btn-red btn-sm' : 'btn btn-outline btn-sm';
-  if (tab === 'fees') {
-    initCIFeeYearSel();
-    loadCIFeeData();
-  }
+  if (tab === 'fees') loadCIFeeData();
 }
 
 function initCIYearSel() {
-  const sel = document.getElementById('ci-year-sel');
+  var sel = document.getElementById('ci-year-sel');
   if (!sel || sel.options.length > 0) return;
-  const cur = new Date().getFullYear();
-  for (let y = cur; y >= 2024; y--) {
-    const o = document.createElement('option');
+  var cur = new Date().getFullYear();
+  for (var y = cur; y >= 2024; y--) {
+    var o = document.createElement('option');
     o.value = y; o.textContent = y; sel.appendChild(o);
   }
 }
 
 function initCIFeeYearSel() {
-  const sel = document.getElementById('ci-fee-year-sel');
+  var sel = document.getElementById('ci-fee-year-sel');
   if (!sel || sel.options.length > 0) return;
-  const cur = new Date().getFullYear();
-  for (let y = cur; y >= 2024; y--) {
-    const o = document.createElement('option');
+  var cur = new Date().getFullYear();
+  for (var y = cur; y >= 2024; y--) {
+    var o = document.createElement('option');
     o.value = y; o.textContent = y; sel.appendChild(o);
   }
 }
 
-async function loadCISessionList() {
-  const sel = document.getElementById('ci-year-sel');
+function loadCISessionList() {
+  var sel = document.getElementById('ci-year-sel');
   if (!sel) return;
-  const year = sel.value;
-  const el = document.getElementById('ci-session-list');
+  var year = sel.value;
+  var el = document.getElementById('ci-session-list');
+  if (!el) return;
   el.innerHTML = '<div class="empty-state">Loading...</div>';
   if (!db || !isFirebaseReady) { el.innerHTML = '<div class="empty-state">Firebase not connected</div>'; return; }
-
-  const snap = await db.ref('checkins').once('value');
-  const all = snap.val() || {};
-  // Filter to selected year
-  const yearDates = Object.keys(all).filter(d => d.startsWith(year)).sort().reverse();
-  _ciAllData = {};
-  yearDates.forEach(d => { _ciAllData[d] = all[d]; });
-
-  if (!yearDates.length) { el.innerHTML = '<div class="empty-state">No check-ins found for ' + year + '</div>'; return; }
-
-  el.innerHTML = yearDates.map(dateKey => {
-    const records = Object.values(all[dateKey] || {});
-    const cash = records.filter(r => r.payment === 'cash').reduce((s, r) => s + (r.feeAmount || 0), 0);
-    const bank = records.filter(r => r.payment === 'bank').reduce((s, r) => s + (r.feeAmount || 0), 0);
-    const display = dateKey.slice(6,8) + '/' + dateKey.slice(4,6) + '/' + dateKey.slice(0,4);
-    return '<div class="card" style="margin-bottom:10px">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
-        '<div>' +
-          '<div style="font-family:\'Roboto Condensed\',sans-serif;font-weight:700;font-size:16px">' + display + '</div>' +
-          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + records.length + ' checked in · $' + cash + ' cash · $' + bank + ' bank</div>' +
+  db.ref('checkins').once('value', function(snap) {
+    var all = snap.val() || {};
+    var yearDates = Object.keys(all).filter(function(d) { return d.startsWith(String(year)); }).sort().reverse();
+    if (!yearDates.length) { el.innerHTML = '<div class="empty-state">No check-ins for ' + year + '</div>'; return; }
+    el.innerHTML = yearDates.map(function(dk) {
+      var records = Object.values(all[dk] || {});
+      var cash = records.filter(function(r) { return r.payment === 'cash'; }).reduce(function(s,r) { return s+(r.feeAmount||0); }, 0);
+      var bank = records.filter(function(r) { return r.payment === 'bank'; }).reduce(function(s,r) { return s+(r.feeAmount||0); }, 0);
+      var disp = dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4);
+      return '<div class="card" style="margin-bottom:10px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
+          '<div><div style="font-family:\'Roboto Condensed\',sans-serif;font-weight:700;font-size:16px">' + disp + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + records.length + ' checked in &middot; $' + cash + ' cash &middot; $' + bank + ' bank</div></div>' +
+          '<button class="btn btn-outline btn-sm" onclick="toggleCIDetail(\'' + dk + '\')">Show Detail</button>' +
         '</div>' +
-        '<button class="btn btn-outline btn-sm" onclick="toggleCIDateDetail('' + dateKey + '')">Show Detail</button>' +
-      '</div>' +
-      '<div id="ci-detail-' + dateKey + '" style="display:none">' + renderCIDateDetail(records) + '</div>' +
-    '</div>';
-  }).join('');
+        '<div id="ci-d-' + dk + '" style="display:none">' + renderCIDateDetail(records) + '</div>' +
+      '</div>';
+    }).join('');
+  });
 }
 
-function toggleCIDateDetail(dateKey) {
-  const el = document.getElementById('ci-detail-' + dateKey);
-  if (!el) return;
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+function toggleCIDetail(dk) {
+  var el = document.getElementById('ci-d-' + dk);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
 function renderCIDateDetail(records) {
   if (!records.length) return '<div style="color:var(--muted);font-size:13px">No records</div>';
-  records.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-  return '<table class="rtable" style="font-size:12px">' +
-    '<thead><tr>' +
-      '<th>Name</th><th>Type</th><th>Activity</th><th>Fee</th><th>Payment</th><th>RO</th><th>Signed</th><th>Time</th>' +
-    '</tr></thead><tbody>' +
-    records.map(r => {
-      const t = r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-      return '<tr>' +
-        '<td><strong>' + (r.displayName || r.firstName || '') + '</strong></td>' +
-        '<td>' + (r.type === 'visitor' ? 'Visitor' : 'Member') + '</td>' +
-        '<td>' + (r.activity === 'practice' ? 'Practice' : 'Event') + '</td>' +
-        '<td>$' + (r.feeAmount || 0) + ' (' + (r.feeType === 'range' ? 'Range' : 'Full') + ')</td>' +
-        '<td>' + (r.payment === 'bank' ? 'Bank' : 'Cash') + '</td>' +
-        '<td>' + (r.roName || '—') + '</td>' +
-        '<td>' + (r.signed ? '✓' : '—') + '</td>' +
-        '<td>' + t + '</td>' +
-      '</tr>';
-    }).join('') +
-    '</tbody></table>';
+  records.sort(function(a,b) { return (a.timestamp||0)-(b.timestamp||0); });
+  var rows = records.map(function(r) {
+    var t = r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true}) : '';
+    return '<tr><td><strong>' + (r.displayName||r.firstName||'') + '</strong></td>' +
+      '<td>' + (r.type==='visitor'?'Visitor':'Member') + '</td>' +
+      '<td>' + (r.activity==='practice'?'Practice':'Event') + '</td>' +
+      '<td>$' + (r.feeAmount||0) + '</td>' +
+      '<td>' + (r.payment==='bank'?'Bank':'Cash') + '</td>' +
+      '<td>' + (r.roName||'&mdash;') + '</td>' +
+      '<td>' + t + '</td></tr>';
+  }).join('');
+  return '<table class="rtable" style="font-size:12px"><thead><tr><th>Name</th><th>Type</th><th>Activity</th><th>Fee</th><th>Payment</th><th>RO</th><th>Time</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
-async function loadCIFeeData() {
-  const sel = document.getElementById('ci-fee-year-sel');
+function loadCIFeeData() {
+  var sel = document.getElementById('ci-fee-year-sel');
   if (!sel) return;
-  const year = sel.value;
-  const el = document.getElementById('ci-fee-list');
+  var year = sel.value;
+  var el = document.getElementById('ci-fee-list');
+  if (!el) return;
   el.innerHTML = '<div class="empty-state">Loading...</div>';
   if (!db || !isFirebaseReady) { el.innerHTML = '<div class="empty-state">Firebase not connected</div>'; return; }
-
-  const snap = await db.ref('checkins').once('value');
-  const all = snap.val() || {};
-  _ciFeeData = [];
-  Object.keys(all).filter(d => d.startsWith(year)).sort().forEach(dateKey => {
-    Object.values(all[dateKey] || {}).forEach(r => {
-      _ciFeeData.push({ ...r, _dateKey: dateKey });
+  db.ref('checkins').once('value', function(snap) {
+    var all = snap.val() || {};
+    _ciFeeData = [];
+    Object.keys(all).filter(function(d) { return d.startsWith(String(year)); }).sort().forEach(function(dk) {
+      Object.values(all[dk]||{}).forEach(function(r) { _ciFeeData.push(Object.assign({}, r, {_dk: dk})); });
     });
+    renderCIFeeList();
   });
-  renderCIFeeList();
 }
 
 function renderCIFeeList() {
-  const el = document.getElementById('ci-fee-list');
-  const totalsEl = document.getElementById('ci-fee-totals');
+  var el = document.getElementById('ci-fee-list');
+  var totEl = document.getElementById('ci-fee-totals');
   if (!el) return;
-
-  const filter = (document.getElementById('ci-fee-filter') || {}).value || 'all';
-  const search = ((document.getElementById('ci-fee-search') || {}).value || '').toLowerCase();
-
-  let data = _ciFeeData;
-  if (filter !== 'all') data = data.filter(r => r.payment === filter);
-  if (search) data = data.filter(r => (r.displayName || r.firstName || '').toLowerCase().includes(search) ||
-    ((r.firstName || '') + ' ' + (r.lastName || '')).toLowerCase().includes(search));
-
-  data.sort((a, b) => (a._dateKey || '').localeCompare(b._dateKey || '') || (a.timestamp || 0) - (b.timestamp || 0));
-
-  const cash = data.filter(r => r.payment === 'cash').reduce((s, r) => s + (r.feeAmount || 0), 0);
-  const bank = data.filter(r => r.payment === 'bank').reduce((s, r) => s + (r.feeAmount || 0), 0);
-
-  if (totalsEl) {
-    totalsEl.style.display = 'block';
-    totalsEl.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap">' +
-      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Cash</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700;color:var(--green)">$' + cash + '</div></div>' +
-      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Bank</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700;color:var(--accent2)">$' + bank + '</div></div>' +
-      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Total</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700">$' + (cash + bank) + '</div></div>' +
-      '<div><span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Records</span><div style="font-family:\'Roboto Mono\',monospace;font-size:20px;font-weight:700">' + data.length + '</div></div>' +
+  var filter = (document.getElementById('ci-fee-filter')||{}).value || 'all';
+  var search = ((document.getElementById('ci-fee-search')||{}).value || '').toLowerCase();
+  var data = _ciFeeData;
+  if (filter !== 'all') data = data.filter(function(r) { return r.payment === filter; });
+  if (search) data = data.filter(function(r) {
+    return (r.displayName||r.firstName||'').toLowerCase().includes(search);
+  });
+  data.sort(function(a,b) { return (a._dk||'').localeCompare(b._dk||'') || (a.timestamp||0)-(b.timestamp||0); });
+  var cash = data.filter(function(r){return r.payment==='cash';}).reduce(function(s,r){return s+(r.feeAmount||0);},0);
+  var bank = data.filter(function(r){return r.payment==='bank';}).reduce(function(s,r){return s+(r.feeAmount||0);},0);
+  if (totEl) {
+    totEl.style.display = 'block';
+    totEl.innerHTML = '<div style="display:flex;gap:24px;flex-wrap:wrap">' +
+      '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Cash</div><div style="font-family:\'Roboto Mono\',monospace;font-size:22px;font-weight:700;color:var(--green)">$' + cash + '</div></div>' +
+      '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Bank</div><div style="font-family:\'Roboto Mono\',monospace;font-size:22px;font-weight:700;color:var(--accent2)">$' + bank + '</div></div>' +
+      '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Total</div><div style="font-family:\'Roboto Mono\',monospace;font-size:22px;font-weight:700">$' + (cash+bank) + '</div></div>' +
+      '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Records</div><div style="font-family:\'Roboto Mono\',monospace;font-size:22px;font-weight:700">' + data.length + '</div></div>' +
     '</div>';
   }
-
   if (!data.length) { el.innerHTML = '<div class="empty-state">No records found</div>'; return; }
-
-  el.innerHTML = '<div class="card" style="padding:0;overflow:hidden">' +
-    '<table class="rtable">' +
-    '<thead><tr><th>Date</th><th>Name</th><th>Fee</th><th>Payment</th></tr></thead>' +
-    '<tbody>' +
-    data.map(r => {
-      const dk = r._dateKey || '';
-      const display = dk ? dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4) : '';
-      const payStyle = r.payment === 'bank' ? 'color:var(--accent2);font-weight:700' : 'color:var(--green);font-weight:700';
-      return '<tr>' +
-        '<td style="font-family:\'Roboto Mono\',monospace;font-size:11px">' + display + '</td>' +
-        '<td><strong>' + (r.displayName || r.firstName || '') + '</strong></td>' +
-        '<td>$' + (r.feeAmount || 0) + '</td>' +
-        '<td style="' + payStyle + '">' + (r.payment === 'bank' ? '🏦 Bank' : '💵 Cash') + '</td>' +
-      '</tr>';
-    }).join('') +
-    '</tbody></table></div>';
+  var rows2 = data.map(function(r) {
+    var dk = r._dk||'';
+    var d = dk ? dk.slice(6,8)+'/'+dk.slice(4,6)+'/'+dk.slice(0,4) : '';
+    var ps = r.payment==='bank' ? 'color:var(--accent2);font-weight:700' : 'color:var(--green);font-weight:700';
+    return '<tr>' +
+      '<td style="font-family:\'Roboto Mono\',monospace;font-size:11px">' + d + '</td>' +
+      '<td><strong>' + (r.displayName||r.firstName||'') + '</strong></td>' +
+      '<td>$' + (r.feeAmount||0) + '</td>' +
+      '<td style="' + ps + '">' + (r.payment==='bank'?'Bank':'Cash') + '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="card" style="padding:0;overflow:hidden"><table class="rtable"><thead><tr><th>Date</th><th>Name</th><th>Fee</th><th>Payment</th></tr></thead><tbody>' + rows2 + '</tbody></table></div>';
 }
 
 // ====================================================
 // CHECK-IN EXCEL EXPORTS
 // ====================================================
-async function exportCheckinExcel() {
-  const sel = document.getElementById('ci-year-sel');
-  const year = sel ? sel.value : new Date().getFullYear();
+function exportCheckinExcel() {
+  var sel = document.getElementById('ci-year-sel');
+  var year = sel ? sel.value : new Date().getFullYear();
   if (!db || !isFirebaseReady) { toast('Firebase not connected', 'error'); return; }
-
-  const snap = await db.ref('checkins').once('value');
-  const all = snap.val() || {};
-  const yearDates = Object.keys(all).filter(d => d.startsWith(String(year))).sort();
-  if (!yearDates.length) { toast('No check-in data for ' + year, 'error'); return; }
-
-  // Flatten all records
-  const allRecords = [];
-  yearDates.forEach(dk => {
-    Object.values(all[dk] || {}).forEach(r => allRecords.push({ ...r, _dateKey: dk }));
+  db.ref('checkins').once('value', function(snap) {
+    var all = snap.val() || {};
+    var yearDates = Object.keys(all).filter(function(d){return d.startsWith(String(year));}).sort();
+    if (!yearDates.length) { toast('No check-in data for ' + year, 'error'); return; }
+    var allRecs = [];
+    yearDates.forEach(function(dk) {
+      Object.values(all[dk]||{}).forEach(function(r){allRecs.push(Object.assign({},r,{_dk:dk}));});
+    });
+    allRecs.sort(function(a,b){return (a._dk||'').localeCompare(b._dk||'')||(a.timestamp||0)-(b.timestamp||0);});
+    var wb = XLSX.utils.book_new();
+    var logRows = [['Date','Full Name','Display Name','Type','Activity','Fee Type','Fee','Payment','RO','Signed','Time']];
+    allRecs.forEach(function(r) {
+      var dk=r._dk||'', ds=dk?dk.slice(6,8)+'/'+dk.slice(4,6)+'/'+dk.slice(0,4):'';
+      var ts=r.timestamp?new Date(r.timestamp).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true}):'';
+      logRows.push([ds,(r.firstName||'')+' '+(r.lastName||''),r.displayName||r.firstName||'',
+        r.type==='visitor'?'Visitor':'Member',r.activity==='practice'?'Practice':'Event',
+        r.feeType==='range'?'Range Pass':'Full Fee',r.feeAmount||0,
+        r.payment==='bank'?'Bank Transfer':'Cash',r.roName||'',r.signed?'Yes':'No',ts]);
+    });
+    var ws1 = XLSX.utils.aoa_to_sheet(logRows);
+    XLSX.utils.book_append_sheet(wb, ws1, 'Check-in Log');
+    var memberMap = {};
+    allRecs.forEach(function(r) {
+      if (!r.memberId) return;
+      if (!memberMap[r.memberId]) memberMap[r.memberId]={fullName:(r.firstName||'')+' '+(r.lastName||''),displayName:r.displayName||r.firstName||'',days:new Set(),events:0,practice:0,cash:0,bank:0,total:0};
+      var e=memberMap[r.memberId];
+      e.days.add(r._dk);
+      if(r.activity==='practice')e.practice++;else e.events++;
+      if(r.payment==='bank')e.bank+=(r.feeAmount||0);else e.cash+=(r.feeAmount||0);
+      e.total+=(r.feeAmount||0);
+    });
+    var sumRows=[['Full Name','Display Name','Days','Events','Practice','Cash','Bank','Total']];
+    Object.values(memberMap).sort(function(a,b){return a.fullName.localeCompare(b.fullName);}).forEach(function(e){
+      sumRows.push([e.fullName,e.displayName,e.days.size,e.events,e.practice,e.cash,e.bank,e.total]);
+    });
+    var ws2=XLSX.utils.aoa_to_sheet(sumRows);
+    XLSX.utils.book_append_sheet(wb,ws2,'Member Summary');
+    var bytes=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
+    var blob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='SPC-Checkins-'+year+'.xlsx';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Check-in export downloaded!','success');
   });
-  allRecords.sort((a, b) => (a._dateKey || '').localeCompare(b._dateKey || '') || (a.timestamp || 0) - (b.timestamp || 0));
-
-  const wb = XLSX.utils.book_new();
-
-  // Sheet 1: Full check-in log
-  const logRows = [['Date', 'Full Name', 'Display Name', 'Member/Visitor', 'Activity', 'Fee Type', 'Fee Amount', 'Payment', 'RO Name', 'Signed', 'Time']];
-  allRecords.forEach(r => {
-    const dk = r._dateKey || '';
-    const dateStr = dk ? dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4) : '';
-    const timeStr = r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-    logRows.push([
-      dateStr,
-      (r.firstName || '') + ' ' + (r.lastName || ''),
-      r.displayName || r.firstName || '',
-      r.type === 'visitor' ? 'Visitor' : 'Member',
-      r.activity === 'practice' ? 'Practice' : 'Event',
-      r.feeType === 'range' ? 'Range Pass' : 'Full Fee',
-      r.feeAmount || 0,
-      r.payment === 'bank' ? 'Bank Transfer' : 'Cash',
-      r.roName || '',
-      r.signed ? 'Yes' : 'No',
-      timeStr
-    ]);
-  });
-  const ws1 = XLSX.utils.aoa_to_sheet(logRows);
-  ws1['!cols'] = [{wch:12},{wch:22},{wch:16},{wch:12},{wch:10},{wch:12},{wch:10},{wch:10},{wch:18},{wch:8},{wch:10}];
-  XLSX.utils.book_append_sheet(wb, ws1, 'Check-in Log');
-
-  // Sheet 2: Member summary
-  const memberMap = {};
-  allRecords.forEach(r => {
-    if (!r.memberId) return;
-    if (!memberMap[r.memberId]) {
-      memberMap[r.memberId] = {
-        fullName: (r.firstName || '') + ' ' + (r.lastName || ''),
-        displayName: r.displayName || r.firstName || '',
-        days: new Set(), events: 0, practice: 0, cash: 0, bank: 0, total: 0
-      };
-    }
-    const e = memberMap[r.memberId];
-    e.days.add(r._dateKey);
-    if (r.activity === 'practice') e.practice++; else e.events++;
-    if (r.payment === 'bank') e.bank += (r.feeAmount || 0); else e.cash += (r.feeAmount || 0);
-    e.total += (r.feeAmount || 0);
-  });
-  const summaryRows = [['Full Name', 'Display Name', 'Days Attended', 'Events', 'Practice', 'Cash Paid', 'Bank Paid', 'Total Paid']];
-  Object.values(memberMap).sort((a, b) => a.fullName.localeCompare(b.fullName)).forEach(e => {
-    summaryRows.push([e.fullName, e.displayName, e.days.size, e.events, e.practice, e.cash, e.bank, e.total]);
-  });
-  const ws2 = XLSX.utils.aoa_to_sheet(summaryRows);
-  ws2['!cols'] = [{wch:22},{wch:16},{wch:14},{wch:8},{wch:10},{wch:10},{wch:10},{wch:10}];
-  XLSX.utils.book_append_sheet(wb, ws2, 'Member Summary');
-
-  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'SPC-Checkins-' + year + '.xlsx';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast('Check-in export downloaded!', 'success');
 }
 
-async function exportFeeExcel() {
-  const sel = document.getElementById('ci-fee-year-sel');
-  const year = sel ? sel.value : new Date().getFullYear();
-  const filter = (document.getElementById('ci-fee-filter') || {}).value || 'all';
-
-  let data = _ciFeeData;
-  if (filter !== 'all') data = data.filter(r => r.payment === filter);
-  data.sort((a, b) => (a._dateKey || '').localeCompare(b._dateKey || '') || (a.timestamp || 0) - (b.timestamp || 0));
-
+function exportFeeExcel() {
+  var year = (document.getElementById('ci-fee-year-sel')||{}).value || new Date().getFullYear();
+  var filter = (document.getElementById('ci-fee-filter')||{}).value || 'all';
+  var data = _ciFeeData;
+  if (filter !== 'all') data = data.filter(function(r){return r.payment===filter;});
   if (!data.length) { toast('No data to export', 'error'); return; }
-
-  const wb = XLSX.utils.book_new();
-  const rows = [['Date', 'Name', 'Fee Amount', 'Payment Method']];
-  data.forEach(r => {
-    const dk = r._dateKey || '';
-    const dateStr = dk ? dk.slice(6,8) + '/' + dk.slice(4,6) + '/' + dk.slice(0,4) : '';
-    rows.push([dateStr, r.displayName || r.firstName || '', r.feeAmount || 0, r.payment === 'bank' ? 'Bank Transfer' : 'Cash']);
+  data.sort(function(a,b){return (a._dk||'').localeCompare(b._dk||'')||(a.timestamp||0)-(b.timestamp||0);});
+  var wb = XLSX.utils.book_new();
+  var rows = [['Date','Name','Fee','Payment']];
+  data.forEach(function(r){
+    var dk=r._dk||'', d=dk?dk.slice(6,8)+'/'+dk.slice(4,6)+'/'+dk.slice(0,4):'';
+    rows.push([d,r.displayName||r.firstName||'',r.feeAmount||0,r.payment==='bank'?'Bank Transfer':'Cash']);
   });
-  const cash = data.filter(r => r.payment === 'cash').reduce((s, r) => s + (r.feeAmount || 0), 0);
-  const bank = data.filter(r => r.payment === 'bank').reduce((s, r) => s + (r.feeAmount || 0), 0);
-  rows.push([], ['', 'Cash Total', cash, ''], ['', 'Bank Total', bank, ''], ['', 'Grand Total', cash + bank, '']);
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:12},{wch:22},{wch:12},{wch:16}];
-  XLSX.utils.book_append_sheet(wb, ws, 'Fee Reconciliation');
-
-  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true });
-  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'SPC-Fees-' + year + '.xlsx';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  var cash=data.filter(function(r){return r.payment==='cash';}).reduce(function(s,r){return s+(r.feeAmount||0);},0);
+  var bank=data.filter(function(r){return r.payment==='bank';}).reduce(function(s,r){return s+(r.feeAmount||0);},0);
+  rows.push([],['','Cash Total',cash,''],['','Bank Total',bank,''],['','Grand Total',cash+bank,'']);
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,'Fee Reconciliation');
+  var bytes=XLSX.write(wb,{type:'array',bookType:'xlsx',cellStyles:true});
+  var blob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='SPC-Fees-'+year+'.xlsx';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast('Fee export downloaded!', 'success');
+  toast('Fee export downloaded!','success');
 }
-
-// showAdminTab CI init — handled inside showAdminTab directly
-
-// loadMembers display name hook — handled inside loadMembers directly
-
 </script>
 </body>
 </html>
